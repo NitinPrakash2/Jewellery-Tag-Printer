@@ -32,27 +32,26 @@ def validate_only(payload: dict):
 
 @router.post("/tag/render", response_model=dict)
 def render_tag(req: TagRenderRequest, db: Session = Depends(get_db)):
-    cleaned = {
-        "purity_huid": req.purity_huid or "",
-        "product_name": req.product_name or "",
-        "gross_weight": req.gross_weight if req.gross_weight is not None else "",
-        "net_weight": req.net_weight if req.net_weight is not None else "",
-        "copies": 1,
-        "printer_name": "",
-    }
     from app.services import settings_service as ss
+    from app.tag.renderer import (
+        DEFAULT_TAG_HEIGHT_MM,
+        DEFAULT_TAG_WIDTH_MM,
+        build_tag_svg,
+    )
 
     s = ss.get_all_merged(db)
-    w = req.tag_width_mm or float(s["tag"].get("width_mm", 50.0))
-    h = req.tag_height_mm or float(s["tag"].get("height_mm", 25.0))
+    try:
+        w = req.tag_width_mm or float(s["tag"].get("width_mm", DEFAULT_TAG_WIDTH_MM))
+        h = req.tag_height_mm or float(s["tag"].get("height_mm", DEFAULT_TAG_HEIGHT_MM))
+    except ValueError:
+        w, h = DEFAULT_TAG_WIDTH_MM, DEFAULT_TAG_HEIGHT_MM
     shop = req.shop_name if req.shop_name is not None else s["shop"].get("name", "")
-    from app.tag.renderer import build_back_svg, build_front_svg
-
     return {
-        "front_svg": build_front_svg(
-            cleaned["purity_huid"], cleaned["product_name"],
-            cleaned["gross_weight"] or "", cleaned["net_weight"] or "",
-            width_mm=w, height_mm=h, has_logo=bool(s["shop"].get("logo_path", "")),
+        "tag_svg": build_tag_svg(
+            req.purity_huid or "", req.product_name or "",
+            req.gross_weight if req.gross_weight is not None else "",
+            req.net_weight if req.net_weight is not None else "",
+            width_mm=w, height_mm=h, shop_name=shop,
+            has_logo=bool(s["shop"].get("logo_path", "")),
         ),
-        "back_svg": build_back_svg(shop, width_mm=w, height_mm=h),
     }

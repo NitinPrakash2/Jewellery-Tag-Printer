@@ -1,5 +1,8 @@
 // Client-side SVG builder mirroring server/app/tag/renderer.py for instant preview.
 // Server remains canonical for print; geometry must stay in sync.
+// Fold-over tag: BACK | FOLD (dashed) | FRONT + tail with string hole.
+
+export const GOLD = "#8C6A2F";
 
 function esc(s) {
   return String(s ?? "")
@@ -9,71 +12,30 @@ function esc(s) {
     .replace(/"/g, "&quot;");
 }
 
-function fmtWeight(v) {
+function toNum(v) {
+  const n = parseFloat(String(v ?? "").trim());
+  return Number.isFinite(n) ? n : 0;
+}
+
+export function fmt3(v) {
   if (v === "" || v == null) return "";
-  return `${String(v).trim()} g`;
+  return `${toNum(v).toFixed(3)} g`;
 }
 
-// Jewellery tag shape: rounded body + narrow tail with string hole.
-function tagShell(w, h) {
-  const f = (n) => +n.toFixed(2);
-  return (
-    `<rect x="${f(w * 0.56)}" y="${f(h * 0.32)}" width="${f(w * 0.4)}" height="${f(h * 0.36)}" rx="${f(h * 0.18)}" fill="#fff" stroke="black" stroke-width="0.35"/>` +
-    `<rect x="${f(w * 0.02)}" y="${f(h * 0.04)}" width="${f(w * 0.6)}" height="${f(h * 0.92)}" rx="${f(h * 0.14)}" fill="#fff" stroke="black" stroke-width="0.35"/>` +
-    `<circle cx="${f(w * 0.925)}" cy="${f(h * 0.5)}" r="${f(h * 0.09)}" fill="#fff" stroke="black" stroke-width="0.3"/>`
-  );
+export function computeLess(gross, net) {
+  if (gross === "" || gross == null || net === "" || net == null) return "";
+  return `${(toNum(gross) - toNum(net)).toFixed(3)} g`;
 }
 
-export function buildFrontSvg({ purity_huid, product_name, gross_weight, net_weight, monogram = "", width_mm = 50, height_mm = 25, has_logo = false }) {
-  const w = Number(width_mm) || 50;
-  const h = Number(height_mm) || 25;
-  const f = (n) => +n.toFixed(2);
-  const branded = Boolean(has_logo && monogram);
-  const tx = f(w * (branded ? 0.225 : 0.06));
-  const tw = f(w * (branded ? 0.375 : 0.52));
-  const logo = branded
-    ? `<text x="${f(w * 0.05)}" y="${f(h * 0.62)}" font-family="Georgia,serif" font-size="${f(h * 0.26)}" font-weight="bold" font-style="italic">${esc(monogram)}</text>`
-    : "";
-  return (
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}" data-side="front">` +
-    tagShell(w, h) +
-    logo +
-    `<text x="${tx}" y="${f(h * 0.32)}" font-family="Arial,sans-serif" font-size="${f(h * 0.13)}" font-weight="bold" textLength="${tw}" lengthAdjust="spacingAndGlyphs">${esc(purity_huid)}</text>` +
-    `<text x="${tx}" y="${f(h * 0.505)}" font-family="Arial,sans-serif" font-size="${f(h * 0.1)}" textLength="${tw}" lengthAdjust="spacingAndGlyphs">Name<tspan dx="4">:</tspan><tspan dx="4">${esc(product_name)}</tspan></text>` +
-    `<text x="${tx}" y="${f(h * 0.675)}" font-family="Arial,sans-serif" font-size="${f(h * 0.1)}" textLength="${tw}" lengthAdjust="spacingAndGlyphs">G.Wt.<tspan dx="4">:</tspan><tspan dx="4">${esc(fmtWeight(gross_weight))}</tspan></text>` +
-    `<text x="${tx}" y="${f(h * 0.845)}" font-family="Arial,sans-serif" font-size="${f(h * 0.1)}" textLength="${tw}" lengthAdjust="spacingAndGlyphs">N.Wt.<tspan dx="4">:</tspan><tspan dx="4">${esc(fmtWeight(net_weight))}</tspan></text>` +
-    `</svg>`
-  );
-}
-
-export function backOrnament(w, h) {
-  const f = (n) => +n.toFixed(2);
-  const y = f(h * 0.68);
-  const cx = f(w * 0.32);
-  const r = f(h * 0.035);
-  return (
-    `<line x1="${f(w * 0.12)}" y1="${y}" x2="${f(w * 0.27)}" y2="${y}" stroke="black" stroke-width="0.35"/>` +
-    `<line x1="${f(w * 0.37)}" y1="${y}" x2="${f(w * 0.52)}" y2="${y}" stroke="black" stroke-width="0.35"/>` +
-    `<circle cx="${f(w * 0.295)}" cy="${y}" r="${f(h * 0.012)}" fill="black"/>` +
-    `<circle cx="${f(w * 0.345)}" cy="${y}" r="${f(h * 0.012)}" fill="black"/>` +
-    `<polygon points="${cx},${f(h * 0.60)} ${f(w * 0.32 + h * 0.045)},${y} ${cx},${f(h * 0.76)} ${f(w * 0.32 - h * 0.045)},${y}" fill="black"/>` +
-    `<circle cx="${cx}" cy="${f(h * 0.545)}" r="${r}" fill="none" stroke="black" stroke-width="0.25"/>`
-  );
-}
-
-export function buildBackSvg({ shop_name, width_mm = 50, height_mm = 25 }) {
-  const w = Number(width_mm) || 50;
-  const h = Number(height_mm) || 25;
-  const f = (n) => +n.toFixed(2);
-  const long = String(shop_name || "").length > 14;
-  const nameAttrs = long ? ` textLength="${f(w * 0.5)}" lengthAdjust="spacingAndGlyphs"` : "";
-  return (
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}" data-side="back">` +
-    tagShell(w, h) +
-    `<text x="${f(w * 0.32)}" y="${f(h * 0.46)}" text-anchor="middle" font-family="Arial,sans-serif" font-size="${f(h * 0.15)}" font-weight="bold"${nameAttrs}>${esc(shop_name)}</text>` +
-    backOrnament(w, h) +
-    `</svg>`
-  );
+export function brandParts(name) {
+  const words = String(name || "").trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return { initial: "", line1: "", line2: "" };
+  if (words.length === 1) return { initial: words[0][0].toUpperCase(), line1: words[0].toUpperCase(), line2: "" };
+  return {
+    initial: words[0][0].toUpperCase(),
+    line1: words[0].toUpperCase(),
+    line2: words.slice(1).join(" ").toUpperCase(),
+  };
 }
 
 export function shopInitials(name) {
@@ -81,4 +43,66 @@ export function shopInitials(name) {
   if (words.length === 0) return "";
   if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
   return (words[0][0] + words[1][0]).toUpperCase();
+}
+
+function tagShell(w, h) {
+  const f = (n) => +n.toFixed(2);
+  const bodyW = w * 0.65;
+  return (
+    `<rect x="${f(w * 0.63)}" y="${f(h * 0.3)}" width="${f(w * 0.35)}" height="${f(h * 0.4)}" rx="${f(h * 0.2)}" fill="#fff" stroke="black" stroke-width="0.3"/>` +
+    `<rect x="${f(w * 0.005)}" y="${f(h * 0.04)}" width="${f(bodyW)}" height="${f(h * 0.92)}" rx="${f(h * 0.12)}" fill="#fff" stroke="black" stroke-width="0.3"/>` +
+    `<circle cx="${f(w * 0.945)}" cy="${f(h * 0.5)}" r="${f(h * 0.11)}" fill="#fff" stroke="black" stroke-width="0.3"/>`
+  );
+}
+
+export function buildTagSvg({ purity_huid, product_name, gross_weight, net_weight, shop_name = "", width_mm = 110, height_mm = 12, has_logo = false }) {
+  const w = Number(width_mm) || 110;
+  const h = Number(height_mm) || 12;
+  const f = (n) => +n.toFixed(2);
+  const bodyW = w * 0.65;
+  const foldX = bodyW * 0.4;
+  const { initial, line1, line2 } = brandParts(shop_name);
+  const less = computeLess(gross_weight, net_weight);
+
+  let s =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}" data-side="fold-tag">` +
+    tagShell(w, h) +
+    `<line x1="${f(foldX)}" y1="${f(h * 0.06)}" x2="${f(foldX)}" y2="${f(h * 0.94)}" stroke="black" stroke-width="0.3" stroke-dasharray="1.2 0.8"/>`;
+
+  // ---- BACK ----
+  const logoCx = foldX * 0.27;
+  if (has_logo && initial) {
+    s += `<text x="${f(logoCx)}" y="${f(h * 0.44)}" text-anchor="middle" font-family="Georgia,serif" font-size="${f(h * 0.4)}" font-weight="bold" fill="${GOLD}">${esc(initial)}</text>`;
+  }
+  if (line1) {
+    s += `<text x="${f(logoCx)}" y="${f(h * 0.62)}" text-anchor="middle" font-family="Georgia,serif" font-size="${f(h * 0.115)}" letter-spacing="1" fill="${GOLD}">${esc(line1)}</text>`;
+  }
+  if (line2) {
+    s += `<text x="${f(logoCx)}" y="${f(h * 0.75)}" text-anchor="middle" font-family="Arial,sans-serif" font-size="${f(h * 0.085)}" letter-spacing="1.5" textLength="${f(foldX * 0.44)}" lengthAdjust="spacingAndGlyphs" fill="${GOLD}">${esc(line2)}</text>`;
+    s += `<text x="${f(logoCx)}" y="${f(h * 0.87)}" text-anchor="middle" font-family="Arial,sans-serif" font-size="${f(h * 0.06)}" letter-spacing="1">TRUST IN EVERY CARAT</text>`;
+  }
+  s += `<line x1="${f(foldX * 0.52)}" y1="${f(h * 0.12)}" x2="${f(foldX * 0.52)}" y2="${f(h * 0.88)}" stroke="black" stroke-width="0.3"/>`;
+
+  const ix = foldX * 0.76;
+  const iw = foldX * 0.42;
+  s += `<text x="${f(ix)}" y="${f(h * 0.34)}" text-anchor="middle" font-family="Arial,sans-serif" font-size="${f(h * 0.115)}" textLength="${f(iw)}" lengthAdjust="spacingAndGlyphs">ITEM - ${esc(product_name)}</text>`;
+  s += `<line x1="${f(ix - iw / 2)}" y1="${f(h * 0.5)}" x2="${f(ix + iw / 2)}" y2="${f(h * 0.5)}" stroke="${GOLD}" stroke-width="0.4"/>`;
+  s += `<text x="${f(ix)}" y="${f(h * 0.72)}" text-anchor="middle" font-family="Arial,sans-serif" font-size="${f(h * 0.15)}" font-weight="bold" textLength="${f(iw)}" lengthAdjust="spacingAndGlyphs">${esc(purity_huid)}</text>`;
+
+  // ---- FRONT ----
+  const fw = bodyW - foldX;
+  const fs = f(h * 0.135);
+  const rows = [
+    ["Gross Wt.", fmt3(gross_weight), 0.3],
+    ["Less Wt.", less, 0.55],
+    ["Net Wt.", fmt3(net_weight), 0.8],
+  ];
+  for (const [label, value, yfrac] of rows) {
+    const y = f(h * yfrac);
+    s += `<text x="${f(foldX + fw * 0.06)}" y="${y}" font-family="Arial,sans-serif" font-size="${fs}" textLength="${f(fw * 0.38)}" lengthAdjust="spacingAndGlyphs">${label}</text>`;
+    s += `<text x="${f(foldX + fw * 0.52)}" y="${y}" font-family="Arial,sans-serif" font-size="${fs}">:</text>`;
+    s += `<text x="${f(foldX + fw * 0.94)}" y="${y}" text-anchor="end" font-family="Arial,sans-serif" font-size="${fs}" font-weight="bold" textLength="${f(fw * 0.36)}" lengthAdjust="spacingAndGlyphs">${esc(value)}</text>`;
+  }
+
+  return s + `</svg>`;
 }

@@ -6,7 +6,7 @@ from app.database.repositories import settings_repo
 DEFAULTS: dict[str, dict[str, str]] = {
     "shop": {"name": "", "logo_path": ""},
     "printer": {"selected": "", "status_note": ""},
-    "tag": {"width_mm": "50.0", "height_mm": "25.0", "orientation": "landscape"},
+    "tag": {"width_mm": "110.0", "height_mm": "12.0", "orientation": "landscape"},
     "calibration": {"offset_x_mm": "0.0", "offset_y_mm": "0.0", "scale": "1.0"},
     "app": {"theme": "light", "default_copies": "1"},
 }

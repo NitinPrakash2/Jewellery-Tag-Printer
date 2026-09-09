@@ -3,7 +3,6 @@ import { History, Printer, Settings } from "lucide-react";
 import HistoryPage from "./pages/HistoryPage.jsx";
 import PrintPage from "./pages/PrintPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
-import { shopInitials } from "./lib/tagSvg.js";
 import { api } from "./services/api.js";
 
 const TABS = [
@@ -33,43 +32,25 @@ export default function App() {
     loadSettings();
   }, [loadSettings]);
 
-  const shopName = settings?.shop?.name || "MK JEWELLERS";
-  const mono = shopInitials(shopName) || "MK";
-
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 text-slate-900">
+    <div className="flex h-screen flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-slate-50 to-slate-100 text-slate-900">
       {/* Brand header */}
-      <header className="z-20 shrink-0 border-b border-slate-200/50 bg-gradient-to-r from-white via-blue-50/40 to-white shadow-[0_2px_20px_rgba(79,70,229,0.08)] backdrop-blur-md">
+      <header className="z-20 shrink-0 border-b border-slate-200/50 bg-gradient-to-r from-white to-white shadow-[0_2px_20px_rgba(15,23,42,0.08)] backdrop-blur-md">
         <div className="flex w-full flex-wrap items-center justify-between gap-4 px-7 py-5">
           <div className="flex items-center gap-4">
-            <div
-              className="flex h-14 w-14 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 font-serif text-2xl font-black italic text-white shadow-lg"
-              style={{ fontFamily: "Georgia,serif" }}
-            >
-              {mono}
-            </div>
+            <img
+              src="/Favicon.jpeg"
+              alt="Manish Ornaments logo"
+              className="h-14 w-14 rounded-xl object-cover shadow-lg ring-1 ring-slate-200"
+            />
             <span>
               <span
                 className="block text-[28px] font-bold leading-tight text-slate-900"
                 style={{ fontFamily: "Georgia,serif" }}
               >
-                Jewellery Tag Printer
-              </span>
-              <span className="mt-1 block text-[11px] font-bold tracking-[0.4em] text-indigo-600">
-                PREMIUM PRECISION
+                Manish Ornaments
               </span>
             </span>
-          </div>
-          <div className="text-right">
-            <div
-              className="text-[26px] font-bold tracking-wide text-slate-900"
-              style={{ fontFamily: "Georgia,serif" }}
-            >
-              {shopName.toUpperCase()}
-            </div>
-            <div className="text-[11px] font-bold tracking-[0.4em] text-indigo-600">
-              TRUST IN EVERY CARAT
-            </div>
           </div>
         </div>
         <div className="flex w-full items-center gap-1 px-7 pb-3">
@@ -79,7 +60,7 @@ export default function App() {
               onClick={() => setTab(id)}
               className={`flex items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-semibold transition duration-200 ${
                 tab === id
-                  ? "bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-[0_4px_12px_rgba(79,70,229,0.3)]"
+                  ? "bg-gradient-to-r from-slate-700 to-slate-800 text-white shadow-[0_4px_12px_rgba(15,23,42,0.3)]"
                   : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
               }`}
             >

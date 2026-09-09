@@ -31,7 +31,7 @@ export function TextInput(props) {
   return (
     <input
       {...props}
-      className={`${CONTROL} w-full px-3.5 focus:border-indigo-500 focus:ring-[3px] focus:ring-indigo-100 ${
+      className={`${CONTROL} w-full px-3.5 focus:border-slate-700 focus:ring-[3px] focus:ring-slate-200 ${
         props["data-error"] ? "border-red-400 hover:border-red-500" : "border-slate-300 hover:border-slate-400"
       } ${props.className || ""}`}
     />
@@ -43,7 +43,7 @@ export function PrimaryButton({ children, small, ...props }) {
   return (
     <button
       {...props}
-      className={`inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-700 font-semibold text-white shadow-[0_8px_16px_rgba(79,70,229,0.3)] transition duration-200 hover:from-indigo-500 hover:to-indigo-600 hover:shadow-[0_10px_20px_rgba(79,70,229,0.4)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none ${size} ${props.className || ""}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-slate-700 to-slate-800 font-semibold text-white shadow-[0_8px_16px_rgba(15,23,42,0.3)] transition duration-200 hover:from-slate-600 hover:to-slate-700 hover:shadow-[0_10px_20px_rgba(15,23,42,0.4)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none ${size} ${props.className || ""}`}
     >
       {children}
     </button>
@@ -71,7 +71,7 @@ export function Card({ children, className = "" }) {
 export function CardTitle({ icon: Icon, children }) {
   return (
     <div className="flex items-center gap-2.5 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white px-4 py-3.5">
-      {Icon && <Icon size={18} className="text-indigo-600" />}
+      {Icon && <Icon size={18} className="text-slate-700" />}
       <h2 className="text-[15px] font-bold text-slate-900">{children}</h2>
     </div>
   );
@@ -113,20 +113,23 @@ export function PremiumSelect({ value, onChange, options, placeholder = "— Sel
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className={`${CONTROL} flex w-full items-center justify-between gap-2 px-3.5 text-left ${
+        className={`${CONTROL} flex w-full items-center justify-between gap-2 bg-gradient-to-b from-white to-slate-50 px-3.5 text-left hover:shadow-md ${
           open
-            ? "border-indigo-500 ring-[3px] ring-indigo-100"
-            : "border-slate-300 hover:border-slate-400"
-        } ${selected ? "" : "text-slate-400"}`}
+            ? "border-slate-900 shadow-md ring-[3px] ring-slate-900/10"
+            : "border-slate-300 hover:border-slate-500"
+        } ${selected ? "text-slate-900" : "text-slate-400"}`}
       >
-        <span className="truncate">{selected ? selected.label : placeholder}</span>
-        <ChevronDown
-          size={16}
-          className={`shrink-0 text-slate-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-        />
+        <span className="truncate font-medium">{selected ? selected.label : placeholder}</span>
+        <span
+          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-colors duration-200 ${
+            open ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"
+          }`}
+        >
+          <ChevronDown size={14} className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+        </span>
       </button>
       {open && (
-        <div className="absolute z-30 mt-2 max-h-60 w-full overflow-auto rounded-lg border border-slate-200 bg-white py-1.5 shadow-xl backdrop-blur-sm">
+        <div className="menu-in menu-scroll absolute z-30 mt-2 max-h-64 w-full overflow-auto rounded-xl border border-slate-200/90 bg-white/95 p-1.5 shadow-[0_20px_50px_rgba(15,23,42,0.22)] backdrop-blur-md">
           {options.map((o) => {
             const active = String(o.value) === String(value);
             return (
@@ -137,17 +140,19 @@ export function PremiumSelect({ value, onChange, options, placeholder = "— Sel
                   onChange(o.value);
                   setOpen(false);
                 }}
-                className={`flex w-full items-center justify-between gap-2 px-3.5 py-2.5 text-left text-sm font-medium transition duration-150 ${
-                  active ? "bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-sm" : "text-slate-700 hover:bg-slate-100"
+                className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition duration-150 ${
+                  active
+                    ? "bg-slate-900 font-semibold text-white shadow-[0_4px_12px_rgba(15,23,42,0.35)]"
+                    : "font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                 }`}
               >
                 <span className="truncate">{o.label}</span>
-                {active && <Check size={16} className="shrink-0" />}
+                {active && <Check size={15} strokeWidth={3} className="shrink-0 text-amber-300" />}
               </button>
             );
           })}
           {options.length === 0 && (
-            <div className="px-3.5 py-2.5 text-[13px] text-slate-400">No options available</div>
+            <div className="px-3 py-2.5 text-[13px] text-slate-400">No options available</div>
           )}
         </div>
       )}
@@ -178,7 +183,7 @@ export function Stepper({ value, onChange, min = 1, max = 99 }) {
     return Math.max(min, Math.min(max, n));
   };
   return (
-    <div className="flex h-10 w-32 items-stretch overflow-hidden rounded-lg border border-slate-300 bg-gradient-to-br from-white to-slate-50 shadow-sm transition focus-within:border-indigo-500 focus-within:ring-[3px] focus-within:ring-indigo-100 hover:border-slate-400 hover:shadow-md">
+    <div className="flex h-10 w-32 items-stretch overflow-hidden rounded-lg border border-slate-300 bg-gradient-to-br from-white to-slate-50 shadow-sm transition focus-within:border-slate-700 focus-within:ring-[3px] focus-within:ring-slate-200 hover:border-slate-400 hover:shadow-md">
       <input
         value={value}
         onChange={(e) => onChange(String(clamp(parseInt(e.target.value, 10))))}
@@ -189,7 +194,7 @@ export function Stepper({ value, onChange, min = 1, max = 99 }) {
         <button
           type="button"
           onClick={() => onChange(String(clamp((parseInt(value, 10) || min) + 1)))}
-          className="flex flex-1 items-center justify-center px-1.5 text-slate-600 transition duration-150 hover:bg-indigo-100 hover:text-indigo-700"
+          className="flex flex-1 items-center justify-center px-1.5 text-slate-600 transition duration-150 hover:bg-slate-200 hover:text-slate-800"
           title="Increase"
         >
           <Plus size={14} className="font-bold" />
@@ -197,7 +202,7 @@ export function Stepper({ value, onChange, min = 1, max = 99 }) {
         <button
           type="button"
           onClick={() => onChange(String(clamp((parseInt(value, 10) || min) - 1)))}
-          className="flex flex-1 items-center justify-center border-t border-slate-200 px-1.5 text-slate-600 transition duration-150 hover:bg-indigo-100 hover:text-indigo-700"
+          className="flex flex-1 items-center justify-center border-t border-slate-200 px-1.5 text-slate-600 transition duration-150 hover:bg-slate-200 hover:text-slate-800"
           title="Decrease"
         >
           <Minus size={14} className="font-bold" />

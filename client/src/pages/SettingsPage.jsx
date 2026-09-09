@@ -74,7 +74,7 @@ export default function SettingsPage({ settings, onSaved }) {
   }
 
   const saveBtn =
-    "rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-700 px-4 py-2 text-[13px] font-semibold text-white shadow-[0_4px_12px_rgba(79,70,229,0.3)] transition duration-200 hover:from-indigo-500 hover:to-indigo-600 active:scale-[0.98] disabled:opacity-50";
+    "rounded-lg bg-gradient-to-r from-slate-700 to-slate-800 px-4 py-2 text-[13px] font-semibold text-white shadow-[0_4px_12px_rgba(15,23,42,0.3)] transition duration-200 hover:from-slate-600 hover:to-slate-700 active:scale-[0.98] disabled:opacity-50";
 
   return (
     <div className="flex flex-col gap-5">

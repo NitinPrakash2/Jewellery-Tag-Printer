@@ -109,4 +109,5 @@ def test_tag_render(client):
                                              "gross_weight": "2.146",
                                              "net_weight": "2.146"})
     assert r.status_code == 200
-    assert "18kt HUID" in r.json()["front_svg"]
+    assert "18kt HUID" in r.json()["tag_svg"]
+    assert "Less Wt." in r.json()["tag_svg"]

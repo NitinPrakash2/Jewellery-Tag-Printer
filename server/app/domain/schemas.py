@@ -49,5 +49,4 @@ class PrintResultOut(BaseModel):
     ok: bool
     message: str
     history_id: Optional[int] = None
-    front_svg: Optional[str] = None
-    back_svg: Optional[str] = None
+    tag_svg: Optional[str] = None

@@ -13,7 +13,7 @@ import {
   Stepper,
   TextInput,
 } from "../components/ui.jsx";
-import { buildBackSvg, buildFrontSvg, shopInitials } from "../lib/tagSvg.js";
+import { buildTagSvg, computeLess } from "../lib/tagSvg.js";
 import { api } from "../services/api.js";
 
 const PURITY_OPTIONS = [
@@ -30,11 +30,14 @@ const PURITY_OPTIONS = [
 ].map((p) => ({ value: p, label: p }));
 
 const TAG_SIZE_PRESETS = [
-  { label: "Custom (As per tag)", value: "custom" },
+  { label: "Custom (manual entry below)", value: "custom" },
+  { label: "55 × 13 mm (fold tag)", value: "55x13" },
+  { label: "110 × 12 mm (fold tag)", value: "110x12" },
   { label: "25 × 15 mm", value: "25x15" },
   { label: "30 × 20 mm", value: "30x20" },
   { label: "40 × 25 mm", value: "40x25" },
   { label: "50 × 25 mm", value: "50x25" },
+  { label: "110 × 15 mm", value: "110x15" },
 ];
 
 const EMPTY = { purity_huid: "", product_name: "", gross_weight: "", net_weight: "", copies: "1" };
@@ -50,12 +53,21 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
   const [serverPreview, setServerPreview] = useState(null);
 
   const shopName = settings?.shop?.name || "";
-  const monogram = shopInitials(shopName);
   const hasLogo = Boolean(settings?.shop?.logo_path);
-  const tagW = Number(settings?.tag?.width_mm) || 50;
-  const tagH = Number(settings?.tag?.height_mm) || 25;
   const printerName = settings?.printer?.selected || "";
-  const tagSizeValue = useMemo(() => {
+  // Manual tag dimensions: typed locally for instant preview, saved on blur/Enter.
+  const [dimW, setDimW] = useState("");
+  const [dimH, setDimH] = useState("");
+  const [dimErr, setDimErr] = useState("");
+  useEffect(() => {
+    if (settings?.tag) {
+      setDimW(settings.tag.width_mm ?? "");
+      setDimH(settings.tag.height_mm ?? "");
+    }
+  }, [settings?.tag?.width_mm, settings?.tag?.height_mm]);
+  const tagW = Number(dimW) > 0 ? Number(dimW) : Number(settings?.tag?.width_mm) || 50;
+  const tagH = Number(dimH) > 0 ? Number(dimH) : Number(settings?.tag?.height_mm) || 25;
+  const tagPresetValue = useMemo(() => {
     const hit = TAG_SIZE_PRESETS.find((t) => t.value === `${tagW}x${tagH}`);
     return hit ? hit.value : "custom";
   }, [tagW, tagH]);
@@ -98,23 +110,23 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
   }, [checkPrinter]);
 
   // Live preview — updates on every keystroke from the same canonical layout.
-  const frontSvg = useMemo(
+  const tagSvg = useMemo(
     () =>
-      buildFrontSvg({
+      buildTagSvg({
         purity_huid: form.purity_huid,
         product_name: form.product_name,
         gross_weight: form.gross_weight,
         net_weight: form.net_weight,
-        monogram,
+        shop_name: shopName,
         width_mm: tagW,
         height_mm: tagH,
         has_logo: hasLogo,
       }),
-    [form, monogram, tagW, tagH, hasLogo]
+    [form, shopName, tagW, tagH, hasLogo]
   );
-  const backSvg = useMemo(
-    () => buildBackSvg({ shop_name: shopName, width_mm: tagW, height_mm: tagH }),
-    [shopName, tagW, tagH]
+  const lessWeight = useMemo(
+    () => computeLess(form.gross_weight, form.net_weight),
+    [form.gross_weight, form.net_weight]
   );
 
   useEffect(() => {
@@ -175,15 +187,35 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
     }
   }
 
-  async function onTagSizeChange(value) {
+  async function onPresetChange(value) {
     if (value === "custom") return;
     const [w, h] = value.split("x");
+    setDimW(w);
+    setDimH(h);
+    setDimErr("");
     try {
       await api.settingsPut("tag", { width_mm: w, height_mm: h });
       onSettingsSaved?.();
       setServerPreview(null);
     } catch {
-      setNotice({ kind: "error", text: "Could not save tag size." });
+      setDimErr("Could not save tag size.");
+    }
+  }
+
+  async function saveDims() {
+    const w = parseFloat(dimW);
+    const h = parseFloat(dimH);
+    if (!(w > 0 && w <= 500 && h > 0 && h <= 500)) {
+      setDimErr("Width and height must be numbers between 0 and 500 mm.");
+      return;
+    }
+    setDimErr("");
+    try {
+      await api.settingsPut("tag", { width_mm: String(w), height_mm: String(h) });
+      onSettingsSaved?.();
+      setServerPreview(null);
+    } catch {
+      setDimErr("Could not save tag size.");
     }
   }
 
@@ -195,8 +227,7 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
     setServerPreview(null);
   }
 
-  const shownFront = serverPreview?.front_svg || frontSvg;
-  const shownBack = serverPreview?.back_svg || backSvg;
+  const shownTag = serverPreview?.tag_svg || tagSvg;
   const connected = printerState?.ok && printerState?.printer?.status !== "not-detected";
 
   return (
@@ -269,9 +300,40 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
                   options={printers.map((p) => ({ value: p.name, label: p.name }))}
                 />
               </Row>
-              <Row label="Tag Size">
-                <PremiumSelect value={tagSizeValue} onChange={onTagSizeChange} options={TAG_SIZE_PRESETS} />
+              <Row label="Preset Size">
+                <PremiumSelect value={tagPresetValue} onChange={onPresetChange} options={TAG_SIZE_PRESETS} />
               </Row>
+              <div>
+                <div className="grid grid-cols-1 gap-1 sm:grid-cols-[150px_minmax(0,1fr)] sm:items-center sm:gap-3">
+                  <span className="text-sm text-slate-600">Tag Size (mm)</span>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <TextInput
+                      value={dimW}
+                      onChange={(e) => setDimW(e.target.value)}
+                      onBlur={saveDims}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.target.blur();
+                      }}
+                      placeholder="W"
+                      inputMode="decimal"
+                      aria-label="Tag width in mm"
+                    />
+                    <span className="text-slate-400">×</span>
+                    <TextInput
+                      value={dimH}
+                      onChange={(e) => setDimH(e.target.value)}
+                      onBlur={saveDims}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.target.blur();
+                      }}
+                      placeholder="H"
+                      inputMode="decimal"
+                      aria-label="Tag height in mm"
+                    />
+                  </div>
+                </div>
+                {dimErr && <div className="mt-1 text-[13px] text-red-600 sm:pl-[162px]">{dimErr}</div>}
+              </div>
             </div>
           </Card>
 
@@ -293,11 +355,11 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
               </div>
             )}
             <TagPreview
-              frontSvg={shownFront}
-              backSvg={shownBack}
+              tagSvg={shownTag}
               widthMm={tagW}
               heightMm={tagH}
               serverBacked={Boolean(serverPreview)}
+              data={{ ...form, shopName, lessWeight }}
             />
           </div>
         </Card>
