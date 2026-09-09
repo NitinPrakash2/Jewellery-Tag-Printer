@@ -1,94 +1,112 @@
-"""LP 46 Neo adapter — Windows driver path.
+"""LP 46 Neo adapter — real Windows-driver print path.
 
-NEEDS HARDWARE VALIDATION: the final spool submission, printable area and
-front/back workflow must be confirmed on the real LP 46 Neo + driver.
-This adapter uses the installed Windows printer driver (no guessed raw
-command language) and reports honest success/failure.
+Brand-agnostic: any printer with a Windows driver works (TVS, Zebra, TSC,
+...). The canonical tag SVG is rasterized to the printer's native 203 DPI
+at exact millimetre size, then spooled through the Windows driver — no
+guessed raw command language anywhere.
+
+One-time setup on the shop PC (Windows Settings > Printers):
+  driver installed + USB connected + exact label size in Printing
+  Preferences (e.g. 110 x 12 mm). Then TEST PRINT + calibration in the app.
 """
-import shutil
-
 from app.logging_setup import log
+from app.printing import windows_spool
 from app.printing.printer_adapter import (
     PrinterAdapter,
     PrinterInfo,
     PrinterNotFound,
     PrintJobResult,
 )
+from app.printing.raster import RasterError
+from app.tag.units import DPI
 
 
-def _win_printers() -> list[PrinterInfo]:
+def _names() -> list[str]:
     try:
-        import win32print  # type: ignore
-    except ImportError:
-        return []
-    out: list[PrinterInfo] = []
-    try:
-        flags = 2  # PRINTER_ENUM_LOCAL
-        for _, _, name, _ in win32print.EnumPrinters(flags):
-            out.append(PrinterInfo(name=name))
-        try:
-            default = win32print.GetDefaultPrinter()
-            for p in out:
-                if p.name == default:
-                    p.is_default = True
-        except Exception:
-            pass
+        return windows_spool.list_printer_names()
     except Exception as exc:
         log.error("printer enumerate failed: %s", exc)
-    return out
+        return []
 
 
 class LP46NeoAdapter(PrinterAdapter):
+    """Default adapter. Despite the name it drives any Windows printer."""
+
     def discover_printers(self) -> list[PrinterInfo]:
-        printers = _win_printers()
-        # Always surface the LP 46 Neo entry point even before driver install
-        # so Settings can show what is expected vs what Windows sees.
-        names = {p.name for p in printers}
+        names = _names()
+        try:
+            default = windows_spool.default_printer_name()
+        except Exception:
+            default = ""
+        out = [PrinterInfo(name=n, is_default=(n == default), status="ready") for n in names]
         if not any("LP 46" in n or "LP46" in n for n in names):
-            printers.append(
+            out.append(
                 PrinterInfo(name="TVS LP 46 Neo (not detected)", status="not-detected")
             )
-        return printers
+        if not any("DCODE" in n.upper() or "DC 423" in n.upper() or "DC423" in n.upper() for n in names):
+            out.append(
+                PrinterInfo(name="DCode DC 423 Pro (not detected)", status="not-detected")
+            )
+        return out
 
     def get_status(self, printer_name: str) -> PrinterInfo:
         if not (printer_name or "").strip():
             raise PrinterNotFound("Please select a printer in Settings first.")
-        for p in _win_printers():
-            if p.name == printer_name:
-                p.status = "ready"
-                return p
-        if printer_name.startswith("TVS LP 46 Neo"):
+        if "(not detected)" in printer_name:
             return PrinterInfo(name=printer_name, status="not-detected")
-        # NEEDS HARDWARE VALIDATION: offline/driver-error states depend on the
-        # real driver; until confirmed, unknown printers report not-found.
-        raise PrinterNotFound(
-            f"Printer '{printer_name}' was not found. Check it is installed and powered on."
-        )
+        try:
+            return windows_spool.printer_status(printer_name)
+        except Exception as exc:
+            msg = str(exc)
+            if "not found" in msg:
+                raise PrinterNotFound(msg)
+            return PrinterInfo(name=printer_name, status=f"error:{msg[:120]}")
+
+    def _print_bitmap(self, printer_name: str, png: bytes, copies: int) -> PrintJobResult:
+        try:
+            message = windows_spool.print_png(printer_name, png, copies=copies)
+            return PrintJobResult(ok=True, message=message)
+        except Exception as exc:
+            log.error("spool failed on %s: %s", printer_name, exc)
+            return PrintJobResult(ok=False, message=str(exc))
 
     def print_svg(self, printer_name: str, svg: str, copies: int = 1) -> PrintJobResult:
-        info = self.get_status(printer_name)
-        if info.status == "not-detected":
+        from app.printing.raster import svg_to_png_bytes
+        from app.tag.renderer import DEFAULT_TAG_HEIGHT_MM, DEFAULT_TAG_WIDTH_MM
+
+        try:
+            info = self.get_status(printer_name)
+        except PrinterNotFound as exc:
+            return PrintJobResult(ok=False, message=str(exc))
+        if info.status == "not-detected" or info.status.startswith("offline"):
             return PrintJobResult(
                 ok=False,
                 message=(
-                    f"'{printer_name}' is not visible to Windows. Install the TVS "
-                    "driver, connect USB, then use Refresh in Settings."
+                    f"'{printer_name}' is not ready ({info.status}). Install the driver, "
+                    "connect USB, power on, then Refresh in Settings."
                 ),
             )
-        # NEEDS HARDWARE VALIDATION: real spool submission (driver paper size,
-        # orientation, margins) must be validated on hardware. We verify the
-        # job payload is renderable and hand it to the driver path.
-        if not svg or "<svg" not in svg:
-            return PrintJobResult(ok=False, message="Print data was empty. Nothing was sent.")
-        if shutil.which("powershell") is None and not _win_printers():
-            return PrintJobResult(ok=False, message="Windows print spooler is unavailable.")
-        log.info("print job: printer=%s copies=%s svg_bytes=%s", printer_name, copies, len(svg))
-        return PrintJobResult(
-            ok=True,
-            message=f"Sent {copies} copie(s) to {printer_name} via Windows driver.",
-        )
+        # Tag dimensions are user-configurable; raster uses the SVG's own
+        # mm size so preview and paper always agree.
+        w, h = _svg_mm_size(svg, DEFAULT_TAG_WIDTH_MM, DEFAULT_TAG_HEIGHT_MM)
+        try:
+            png = svg_to_png_bytes(svg, w, h, dpi=DPI)
+        except RasterError as exc:
+            return PrintJobResult(ok=False, message=str(exc))
+        return self._print_bitmap(printer_name, png, copies)
 
     def print_test(self, printer_name: str) -> PrintJobResult:
+        from app.printing.raster import svg_to_png_bytes
+
+        try:
+            info = self.get_status(printer_name)
+        except PrinterNotFound as exc:
+            return PrintJobResult(ok=False, message=str(exc))
+        if info.status == "not-detected" or info.status.startswith("offline"):
+            return PrintJobResult(
+                ok=False,
+                message=f"'{printer_name}' is not ready ({info.status}).",
+            )
         test_svg = (
             '<svg xmlns="http://www.w3.org/2000/svg" width="50mm" height="25mm">'
             "<rect x='0.3' y='0.3' width='49.4' height='24.4' fill='none' "
@@ -96,7 +114,22 @@ class LP46NeoAdapter(PrinterAdapter):
             "<text x='50%' y='55%' text-anchor='middle' font-size='4'>TEST PRINT</text>"
             "</svg>"
         )
-        return self.print_svg(printer_name, test_svg, copies=1)
+        try:
+            png = svg_to_png_bytes(test_svg, 50.0, 25.0, dpi=DPI)
+        except RasterError as exc:
+            return PrintJobResult(ok=False, message=str(exc))
+        return self._print_bitmap(printer_name, png, 1)
+
+
+def _svg_mm_size(svg: str, default_w: float, default_h: float) -> tuple[float, float]:
+    import re
+
+    try:
+        w = re.search(r'width="([\d.]+)mm"', svg)
+        h = re.search(r'height="([\d.]+)mm"', svg)
+        return float(w.group(1)) if w else default_w, float(h.group(1)) if h else default_h
+    except (ValueError, AttributeError):
+        return default_w, default_h
 
 
 def get_adapter() -> PrinterAdapter:

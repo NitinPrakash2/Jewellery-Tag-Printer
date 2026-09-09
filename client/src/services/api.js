@@ -19,6 +19,10 @@ export const api = {
   printers: () => req("GET", "/api/printers"),
   printerStatus: (name) => req("GET", `/api/printers/status?name=${encodeURIComponent(name || "")}`),
   testPrint: (printer_name) => req("POST", "/api/printers/test", { printer_name }),
+  printersSetup: (payload) => req("POST", "/api/printers/setup", payload),
+  driverHelp: () => req("GET", "/api/printers/driver-help"),
+  usbLive: (printer_name) =>
+    req("GET", `/api/printers/usb-live?printer_name=${encodeURIComponent(printer_name || "")}`),
   print: (payload) => req("POST", "/api/print", payload),
   validate: (payload) => req("POST", "/api/print/validate", payload),
   renderTag: (payload) => req("POST", "/api/tag/render", payload),

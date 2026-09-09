@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, RefreshCw } from "lucide-react";
 import LogoDropzone from "../components/LogoDropzone.jsx";
-import { Card, Field, Notice, PremiumSelect, TextInput } from "../components/ui.jsx";
+import PrinterSetupWizard from "../components/PrinterSetupWizard.jsx";
+import UsbLivePanel from "../components/UsbLivePanel.jsx";
+import { Card, Field, Notice, PremiumSelect, groupPrinterOptions, TextInput } from "../components/ui.jsx";
 import { api } from "../services/api.js";
 
 function Section({ title, children }) {
@@ -13,6 +15,54 @@ function Section({ title, children }) {
   );
 }
 
+// Plain-language printer status for non-technical users.
+function PrinterStatusCard({ status }) {
+  const st = String(status?.printer?.status || status?.status || "unknown");
+  const maxW = status?.max_print_width_mm || null;
+  let tone = "ok";
+  let title = "Ready to print";
+  let hint = "Press Test print to confirm paper comes out correctly.";
+  if (st.includes("not-detected") || st.includes("not-found")) {
+    tone = "warn";
+    title = "Printer not connected";
+    hint = "Install the driver (see Printer Setup above), connect USB, power on — then press Run Setup.";
+  } else if (st.includes("out of paper")) {
+    tone = "bad";
+    title = "Out of paper";
+    hint = "Load labels/ribbon in the printer and try again.";
+  } else if (st.includes("door open")) {
+    tone = "bad";
+    title = "Printer cover is open";
+    hint = "Close the printer cover properly and try again.";
+  } else if (st.startsWith("offline") || st === "offline") {
+    tone = "bad";
+    title = "Printer is off or unplugged";
+    hint = "Switch the printer on and check the USB cable, then try again.";
+  } else if (st.startsWith("error") || st.includes("paper problem")) {
+    tone = "bad";
+    title = "Printer reports an error";
+    hint = "Check paper, ribbon and power on the printer, then try again.";
+  }
+  const styles =
+    tone === "ok"
+      ? "border-green-200 bg-green-50"
+      : tone === "warn"
+        ? "border-amber-200 bg-amber-50"
+        : "border-red-200 bg-red-50";
+  const dot = tone === "ok" ? "bg-green-500" : tone === "warn" ? "bg-amber-400" : "bg-red-500";
+  const text = tone === "ok" ? "text-green-800" : tone === "warn" ? "text-amber-900" : "text-red-800";
+  return (
+    <div className={`rounded-xl border px-4 py-3 ${styles}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={`inline-block h-2.5 w-2.5 rounded-full ${dot}`} />
+        <span className={`text-sm font-bold ${text}`}>{title}</span>
+        {maxW && <span className="text-xs font-medium text-slate-500">· prints up to {maxW} mm wide</span>}
+      </div>
+      <div className={`mt-1 text-[13px] ${text}`}>{hint}</div>
+    </div>
+  );
+}
+
 export default function SettingsPage({ settings, onSaved }) {
   const [local, setLocal] = useState(settings || {});
   const [printers, setPrinters] = useState([]);
@@ -20,12 +70,15 @@ export default function SettingsPage({ settings, onSaved }) {
   const [notice, setNotice] = useState(null);
   const [noticeCat, setNoticeCat] = useState(null);
   const [saving, setSaving] = useState(null);
+  const [scanning, setScanning] = useState(false);
   const [savedCat, setSavedCat] = useState(null);
   const [logoUri, setLogoUri] = useState(null);
   // Guard: never clobber the user's unsaved edits when settings reload
   // (e.g. after a logo upload). Cleared on successful save.
   const dirtyRef = useRef(false);
   const savedTimer = useRef(null);
+  // Printers already auto-selected this session (don't nag / re-fire).
+  const autoTriedRef = useRef(new Set());
 
   useEffect(() => {
     if (!dirtyRef.current) setLocal(settings || {});
@@ -98,13 +151,51 @@ export default function SettingsPage({ settings, onSaved }) {
   }
 
   async function refreshPrinters() {
+    setScanning(true);
     try {
       const r = await api.printers();
-      setPrinters(r.printers || []);
+      const list = r.printers || [];
+      setPrinters(list);
+      const real = list.filter((p) => p.status !== "not-detected");
+      if (real.length > 0) {
+        setNotice({
+          kind: "success",
+          text: `Found ${real.length} printer(s): ${real.map((p) => p.name).join(", ")}`,
+        });
+      } else {
+        setNotice({
+          kind: "error",
+          text: "No printer found yet — check USB cable and power, then try again.",
+        });
+      }
+      setNoticeCat(null);
     } catch {
       setNotice({ kind: "error", text: "Could not refresh printer list." });
+      setNoticeCat(null);
+    } finally {
+      setScanning(false);
     }
   }
+
+  // Auto-select a newly connected printer (any brand). Fires once per
+  // printer per session; manual choices are never overridden twice.
+  const handleAutoSelect = useCallback(
+    async (name) => {
+      if (!name || autoTriedRef.current.has(name)) return;
+      autoTriedRef.current.add(name);
+      try {
+        await api.settingsPut("printer", { selected: name });
+        // Sync just the printer key — preserve other unsaved edits.
+        setLocal((s) => ({ ...s, printer: { ...(s.printer || {}), selected: name } }));
+        setNotice({ kind: "success", text: `${name} connected — selected automatically.` });
+        setNoticeCat(null);
+        onSaved?.();
+      } catch {
+        /* silent: user can still select manually */
+      }
+    },
+    [onSaved]
+  );
 
   async function checkStatus() {
     try {
@@ -129,17 +220,38 @@ export default function SettingsPage({ settings, onSaved }) {
       {noticeCat === null && notice && <Notice kind={notice.kind}>{notice.text}</Notice>}
 
       <Section title="Printer Configuration">
+        <UsbLivePanel
+          printerName={local?.printer?.selected || ""}
+          widthMm={local?.tag?.width_mm || ""}
+          heightMm={local?.tag?.height_mm || ""}
+          onPrinterList={refreshPrinters}
+          onAutoSelect={handleAutoSelect}
+          notify={(n) => {
+            setNotice(n);
+            setNoticeCat(null);
+          }}
+        />
+        <PrinterSetupWizard
+          printerName={local?.printer?.selected || ""}
+          widthMm={local?.tag?.width_mm || ""}
+          heightMm={local?.tag?.height_mm || ""}
+          onPrinterList={refreshPrinters}
+          notify={(n) => {
+            setNotice(n);
+            setNoticeCat(null);
+          }}
+        />
         <Field label="Selected printer">
           <div className="flex gap-2">
             <PremiumSelect
               value={local?.printer?.selected || ""}
               onChange={(v) => setSel("printer", "selected")(v)}
               placeholder="— Select printer —"
-              options={printers.map((p) => ({ value: p.name, label: p.name }))}
+              options={groupPrinterOptions(printers)}
               className="flex-1"
             />
-            <button onClick={refreshPrinters} title="Refresh printer list" className="rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 shadow-sm transition duration-200 hover:border-slate-400 hover:bg-slate-50">
-              <RefreshCw size={17} className="text-slate-600" />
+            <button onClick={refreshPrinters} disabled={scanning} title="Refresh printer list" className="rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 shadow-sm transition duration-200 hover:border-slate-400 hover:bg-slate-50 disabled:opacity-50">
+              <RefreshCw size={17} className={`text-slate-600 ${scanning ? "animate-spin" : ""}`} />
             </button>
           </div>
         </Field>
@@ -150,7 +262,7 @@ export default function SettingsPage({ settings, onSaved }) {
           <SectionNotice cat="printer" />
         </div>
         <SectionNotice cat="printer" />
-        {status && <div className="text-sm bg-slate-50 rounded-lg p-3 text-slate-700 border border-slate-200/60 font-mono">{JSON.stringify(status)}</div>}
+        {status && <PrinterStatusCard status={status} />}
       </Section>
 
       <Section title="Tag Dimensions">

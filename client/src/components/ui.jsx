@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown, Minus, Plus } from "lucide-react";
 
 export function Field({ label, error, children }) {
@@ -91,34 +92,65 @@ export function Notice({ kind = "error", children }) {
   return <div className={`rounded-lg border px-4 py-3 text-[13px] font-medium backdrop-blur-sm ${styles}`}>{children}</div>;
 }
 
-// Premium custom dropdown: button trigger + floating menu with check marks.
+// Premium custom dropdown: button trigger + portal menu (renders above
+// everything — never hides behind cards) with check marks + group headers.
+// Options: [{value, label}] or [{header: "Installed"}] separator rows.
 export function PremiumSelect({ value, onChange, options, placeholder = "— Select —", className = "" }) {
   const [open, setOpen] = useState(false);
+  const [rect, setRect] = useState(null);
   const ref = useRef(null);
+  const menuRef = useRef(null);
+
+  const doOpen = () => {
+    if (ref.current) {
+      const r = ref.current.getBoundingClientRect();
+      // Always open below (in sync with the page). The menu height shrinks
+      // to fit the space available; it flips up only when almost no room
+      // is left below at all.
+      const spaceBelow = window.innerHeight - r.bottom;
+      const openUp = spaceBelow < 132 && r.top > spaceBelow;
+      setRect({
+        top: openUp ? undefined : r.bottom + 6,
+        bottom: openUp ? window.innerHeight - r.top + 6 : undefined,
+        left: r.left,
+        width: r.width,
+        maxH: Math.max(120, (openUp ? r.top : spaceBelow) - 12),
+      });
+    }
+    setOpen(true);
+  };
 
   useEffect(() => {
     if (!open) return;
     const close = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+      // Menu lives in a portal (outside ref) — ignore clicks inside either.
+      if (ref.current?.contains(e.target)) return;
+      if (menuRef.current?.contains(e.target)) return;
+      setOpen(false);
     };
     const onKey = (e) => {
       if (e.key === "Escape") setOpen(false);
     };
+    const onScroll = () => setOpen(false);
     document.addEventListener("mousedown", close);
     document.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
     return () => {
       document.removeEventListener("mousedown", close);
       document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
     };
   }, [open ]);
 
-  const selected = options.find((o) => String(o.value) === String(value));
+  const selected = options.find((o) => o.value !== undefined && String(o.value) === String(value));
 
   return (
     <div ref={ref} className={`relative ${className}`}>
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => (open ? setOpen(false) : doOpen())}
         className={`${CONTROL} flex w-full items-center justify-between gap-2 bg-gradient-to-b from-white to-slate-50 px-3.5 text-left hover:shadow-md ${
           open
             ? "border-slate-900 shadow-md ring-[3px] ring-slate-900/10"
@@ -134,36 +166,73 @@ export function PremiumSelect({ value, onChange, options, placeholder = "— Sel
           <ChevronDown size={14} className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
         </span>
       </button>
-      {open && (
-        <div className="menu-in menu-scroll absolute z-30 mt-2 max-h-64 w-full overflow-auto rounded-xl border border-slate-200/90 bg-white/95 p-1.5 shadow-[0_20px_50px_rgba(15,23,42,0.22)] backdrop-blur-md">
-          {options.map((o) => {
-            const active = String(o.value) === String(value);
-            return (
-              <button
-                key={String(o.value)}
-                type="button"
-                onClick={() => {
-                  onChange(o.value);
-                  setOpen(false);
-                }}
-                className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition duration-150 ${
-                  active
-                    ? "bg-slate-900 font-semibold text-white shadow-[0_4px_12px_rgba(15,23,42,0.35)]"
-                    : "font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                }`}
-              >
-                <span className="truncate">{o.label}</span>
-                {active && <Check size={15} strokeWidth={3} className="shrink-0 text-amber-300" />}
-              </button>
-            );
-          })}
-          {options.length === 0 && (
-            <div className="px-3 py-2.5 text-[13px] text-slate-400">No options available</div>
-          )}
-        </div>
-      )}
+      {open &&
+        rect &&
+        createPortal(
+          <div
+            ref={menuRef}
+            data-premium-menu
+            className="menu-in menu-scroll fixed z-[100] max-h-64 overflow-auto rounded-xl border border-slate-200/90 bg-white/95 p-1.5 shadow-[0_20px_50px_rgba(15,23,42,0.22)] backdrop-blur-md"
+            style={{ top: rect.top, bottom: rect.bottom, left: rect.left, width: rect.width, maxHeight: rect.maxH || 256 }}
+          >
+            {options.map((o, i) => {
+              if (o.header !== undefined) {
+                return (
+                  <div
+                    key={`h-${i}`}
+                    className="px-3 pb-1 pt-2 text-[11px] font-bold uppercase tracking-wider text-slate-400"
+                  >
+                    {o.header}
+                  </div>
+                );
+              }
+              const active = String(o.value) === String(value);
+              return (
+                <button
+                  key={String(o.value)}
+                  type="button"
+                  onClick={() => {
+                    onChange(o.value);
+                    setOpen(false);
+                  }}
+                  className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition duration-150 ${
+                    active
+                      ? "bg-slate-900 font-semibold text-white shadow-[0_4px_12px_rgba(15,23,42,0.35)]"
+                      : "font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                  }`}
+                >
+                  <span className="truncate">{o.label}</span>
+                  {active && <Check size={15} strokeWidth={3} className="shrink-0 text-amber-300" />}
+                </button>
+              );
+            })}
+            {options.length === 0 && (
+              <div className="px-3 py-2.5 text-[13px] text-slate-400">No options available</div>
+            )}
+          </div>,
+          document.body
+        )}
     </div>
   );
+}
+
+// Grouped printer options: installed printers first, then not-installed
+// models (selecting one opens driver setup guidance).
+export function groupPrinterOptions(printers) {
+  const real = (printers || []).filter((p) => p.status !== "not-detected");
+  const missing = (printers || []).filter((p) => p.status === "not-detected");
+  const out = [];
+  if (real.length > 0) {
+    out.push({ header: "Installed on this PC" });
+    real.forEach((p) =>
+      out.push({ value: p.name, label: `${p.name}${p.is_default ? " (default)" : ""}` })
+    );
+  }
+  if (missing.length > 0) {
+    out.push({ header: "Not installed — select to set up" });
+    missing.forEach((p) => out.push({ value: p.name, label: p.name }));
+  }
+  return out;
 }
 
 // Connection status pill

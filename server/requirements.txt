@@ -8,3 +8,9 @@ python-dotenv==1.2.1
 httpx==0.28.1
 pytest==9.1.1
 python-multipart==0.0.32
+pywin32==312
+Pillow==12.2.0
+svglib==2.2.0
+reportlab==5.0.1
+rlPyCairo==0.4.0
+wmi==1.5.1

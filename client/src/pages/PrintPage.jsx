@@ -7,6 +7,7 @@ import {
   Notice,
   OutlineButton,
   PremiumSelect,
+  groupPrinterOptions,
   PrimaryButton,
   Row,
   StatusPill,
@@ -30,14 +31,15 @@ const PURITY_OPTIONS = [
 ].map((p) => ({ value: p, label: p }));
 
 const TAG_SIZE_PRESETS = [
-  { label: "Custom (manual entry below)", value: "custom" },
-  { label: "55 × 13 mm (fold tag)", value: "55x13" },
-  { label: "110 × 12 mm (fold tag)", value: "110x12" },
-  { label: "25 × 15 mm", value: "25x15" },
-  { label: "30 × 20 mm", value: "30x20" },
-  { label: "40 × 25 mm", value: "40x25" },
-  { label: "50 × 25 mm", value: "50x25" },
-  { label: "110 × 15 mm", value: "110x15" },
+  { label: "Custom (manual entry below)", value: "custom", w: 0 },
+  { label: "55 × 13 mm (fold tag)", value: "55x13", w: 55 },
+  { label: "100 × 12 mm (fits 104mm printers)", value: "100x12", w: 100 },
+  { label: "110 × 12 mm (fold tag)", value: "110x12", w: 110 },
+  { label: "25 × 15 mm", value: "25x15", w: 25 },
+  { label: "30 × 20 mm", value: "30x20", w: 30 },
+  { label: "40 × 25 mm", value: "40x25", w: 40 },
+  { label: "50 × 25 mm", value: "50x25", w: 50 },
+  { label: "110 × 15 mm", value: "110x15", w: 110 },
 ];
 
 const EMPTY = { purity_huid: "", product_name: "", gross_weight: "", less_weight: "", copies: "1" };
@@ -72,6 +74,20 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
     const hit = TAG_SIZE_PRESETS.find((t) => t.value === `${tagW}x${tagH}`);
     return hit ? hit.value : "custom";
   }, [tagW, tagH]);
+
+  // Real-time printer-aware suggestions: presets wider than the selected
+  // printer's max print width are flagged, and a fitting size is suggested.
+  const maxW = printerState?.max_print_width_mm || null;
+  const tooWide = Boolean(maxW && tagW > maxW);
+  const suggestedW = maxW ? Math.max(20, maxW - 4) : null;
+  const presetOptions = useMemo(
+    () =>
+      TAG_SIZE_PRESETS.map((t) => ({
+        value: t.value,
+        label: maxW && t.w > maxW ? `${t.label} — too wide` : t.label,
+      })),
+    [maxW]
+  );
 
   const set = (k) => (e) => {
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -213,11 +229,15 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
   async function onPresetChange(value) {
     if (value === "custom") return;
     const [w, h] = value.split("x");
-    setDimW(w);
-    setDimH(h);
+    await applyDims(w, h);
+  }
+
+  async function applyDims(w, h) {
+    setDimW(String(w));
+    setDimH(String(h));
     setDimErr("");
     try {
-      await api.settingsPut("tag", { width_mm: w, height_mm: h });
+      await api.settingsPut("tag", { width_mm: String(w), height_mm: String(h) });
       onSettingsSaved?.();
       setServerPreview(null);
     } catch {
@@ -325,11 +345,11 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
                   value={printerName}
                   onChange={onPrinterChange}
                   placeholder="Select printer"
-                  options={printers.map((p) => ({ value: p.name, label: p.name }))}
+                  options={groupPrinterOptions(printers)}
                 />
               </Row>
               <Row label="Preset Size">
-                <PremiumSelect value={tagPresetValue} onChange={onPresetChange} options={TAG_SIZE_PRESETS} />
+                <PremiumSelect value={tagPresetValue} onChange={onPresetChange} options={presetOptions} />
               </Row>
               <div>
                 <div className="grid grid-cols-1 gap-1 sm:grid-cols-[150px_minmax(0,1fr)] sm:items-center sm:gap-3">
@@ -361,7 +381,23 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
                   </div>
                 </div>
                 {dimErr && <div className="mt-1 text-[13px] text-red-600 sm:pl-[162px]">{dimErr}</div>}
+                {maxW && !tooWide && (
+                  <div className="mt-1 text-xs text-slate-400 sm:pl-[162px]">
+                    {printerName || "Printer"} prints max {maxW} mm wide — fits.
+                  </div>
+                )}
               </div>
+              {tooWide && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
+                  Tag is {tagW} mm wide but this printer prints max {maxW} mm — the right edge will be cut off.
+                  <button
+                    onClick={() => applyDims(suggestedW, tagH)}
+                    className="ml-2 font-bold underline underline-offset-2 hover:text-amber-700"
+                  >
+                    Use {suggestedW}×{tagH} instead
+                  </button>
+                </div>
+              )}
             </div>
           </Card>
 
