@@ -18,10 +18,10 @@ The implementation must use the following stack. Treat this section as an **arch
 
 ### 2.1 Frontend / Desktop UI
 
-**React + TypeScript**
+**React + JavaScript**
 
 - Use **React** for the complete application UI.
-- Use **TypeScript** for all frontend code.
+- Use **JavaScript** for all frontend code.
 - Use **Vite** as the frontend build tool.
 - The UI should be component-based and modular.
 
@@ -100,7 +100,7 @@ Preferred:
 Architecture:
 
 ```text
-React + TypeScript + Vite
+React + JavaScript + Vite
             ↓
       PySide6 WebEngine
             ↓
@@ -203,7 +203,7 @@ Do not add libraries without a clear project need.
 
 | Layer | Technology | Purpose |
 |---|---|---|
-| UI | **React + TypeScript** | Main application interface |
+| UI | **React + JavaScript** | Main application interface |
 | Build | **Vite** | Frontend development/build |
 | Styling | **Tailwind CSS** | Primary styling system |
 | Components | **shadcn/ui + Radix UI** | Reusable UI components |
