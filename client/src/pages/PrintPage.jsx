@@ -13,7 +13,7 @@ import {
   Stepper,
   TextInput,
 } from "../components/ui.jsx";
-import { buildTagSvg, computeLess } from "../lib/tagSvg.js";
+import { buildTagSvg, computeLess, computeNet } from "../lib/tagSvg.js";
 import { api } from "../services/api.js";
 
 const PURITY_OPTIONS = [
@@ -40,7 +40,7 @@ const TAG_SIZE_PRESETS = [
   { label: "110 × 15 mm", value: "110x15" },
 ];
 
-const EMPTY = { purity_huid: "", product_name: "", gross_weight: "", net_weight: "", copies: "1" };
+const EMPTY = { purity_huid: "", product_name: "", gross_weight: "", less_weight: "", copies: "1" };
 
 export default function PrintPage({ settings, onSettingsSaved, refreshHistorySignal }) {
   const [form, setForm] = useState(EMPTY);
@@ -51,6 +51,7 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
   const [printers, setPrinters] = useState([]);
   const [printerState, setPrinterState] = useState(null);
   const [serverPreview, setServerPreview] = useState(null);
+  const [logoImageData, setLogoImageData] = useState(null);
 
   const shopName = settings?.shop?.name || "";
   const hasLogo = Boolean(settings?.shop?.logo_path);
@@ -65,8 +66,8 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
       setDimH(settings.tag.height_mm ?? "");
     }
   }, [settings?.tag?.width_mm, settings?.tag?.height_mm]);
-  const tagW = Number(dimW) > 0 ? Number(dimW) : Number(settings?.tag?.width_mm) || 50;
-  const tagH = Number(dimH) > 0 ? Number(dimH) : Number(settings?.tag?.height_mm) || 25;
+  const tagW = Number(dimW) > 0 ? Number(dimW) : Number(settings?.tag?.width_mm) || 110;
+  const tagH = Number(dimH) > 0 ? Number(dimH) : Number(settings?.tag?.height_mm) || 15;
   const tagPresetValue = useMemo(() => {
     const hit = TAG_SIZE_PRESETS.find((t) => t.value === `${tagW}x${tagH}`);
     return hit ? hit.value : "custom";
@@ -109,24 +110,45 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
     checkPrinter();
   }, [checkPrinter]);
 
-  // Live preview — updates on every keystroke from the same canonical layout.
+  // Load logo image (data URI) from the server for live preview
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .logoGet()
+      .then((r) => {
+        if (!cancelled) setLogoImageData(r.data_uri || null);
+      })
+      .catch(() => {
+        if (!cancelled) setLogoImageData(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [settings?.shop?.logo_path]);
+
+  // Net is automatic: net = gross - less. Live preview uses the same math.
+  const netWeight = useMemo(
+    () => computeNet(form.gross_weight, form.less_weight),
+    [form.gross_weight, form.less_weight]
+  );
   const tagSvg = useMemo(
     () =>
       buildTagSvg({
         purity_huid: form.purity_huid,
         product_name: form.product_name,
         gross_weight: form.gross_weight,
-        net_weight: form.net_weight,
+        net_weight: netWeight,
         shop_name: shopName,
         width_mm: tagW,
         height_mm: tagH,
         has_logo: hasLogo,
+        logo_image: logoImageData,
       }),
-    [form, shopName, tagW, tagH, hasLogo]
+    [form.purity_huid, form.product_name, form.gross_weight, netWeight, shopName, tagW, tagH, hasLogo, logoImageData]
   );
   const lessWeight = useMemo(
-    () => computeLess(form.gross_weight, form.net_weight),
-    [form.gross_weight, form.net_weight]
+    () => computeLess(form.gross_weight, netWeight),
+    [form.gross_weight, netWeight]
   );
 
   useEffect(() => {
@@ -141,7 +163,8 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
         purity_huid: form.purity_huid,
         product_name: form.product_name,
         gross_weight: form.gross_weight,
-        net_weight: form.net_weight,
+        less_weight: form.less_weight,
+        net_weight: netWeight || undefined,
         copies: Number(form.copies) || 1,
       });
       if (res.ok) {
@@ -168,7 +191,7 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
         purity_huid: form.purity_huid,
         product_name: form.product_name,
         gross_weight: form.gross_weight || null,
-        net_weight: form.net_weight || null,
+        net_weight: netWeight || null,
       });
       setServerPreview(r);
       setNotice({ kind: "success", text: "Server preview loaded — exactly what will print." });
@@ -263,13 +286,18 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
                 )}
               </Row>
               <Row label="Product Name" error={errors.product_name}>
-                <TextInput value={form.product_name} onChange={set("product_name")} placeholder="Ring" data-error={!!errors.product_name} />
+                <TextInput value={form.product_name} onChange={set("product_name")} placeholder="e.g. Ring" data-error={!!errors.product_name} />
               </Row>
               <Row label="Gross Weight (G.Wt.)" error={errors.gross_weight}>
-                <TextInput value={form.gross_weight} onChange={set("gross_weight")} placeholder="2.146" inputMode="decimal" data-error={!!errors.gross_weight} />
+                <TextInput value={form.gross_weight} onChange={set("gross_weight")} placeholder="e.g. 2.146" inputMode="decimal" suffix="g" data-error={!!errors.gross_weight} />
               </Row>
-              <Row label="Net Weight (N.Wt.)" error={errors.net_weight}>
-                <TextInput value={form.net_weight} onChange={set("net_weight")} placeholder="2.146" inputMode="decimal" data-error={!!errors.net_weight} />
+              <Row label="Less Weight (L.Wt.)" error={errors.less_weight}>
+                <TextInput value={form.less_weight} onChange={set("less_weight")} placeholder="e.g. 0.000" inputMode="decimal" suffix="g" data-error={!!errors.less_weight} />
+              </Row>
+              <Row label="Net Weight (auto)">
+                <div className="flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-800">
+                  {netWeight ? `${netWeight} g` : <span className="font-normal text-slate-400">—</span>}
+                </div>
               </Row>
             </div>
           </Card>
@@ -359,7 +387,7 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
               widthMm={tagW}
               heightMm={tagH}
               serverBacked={Boolean(serverPreview)}
-              data={{ ...form, shopName, lessWeight }}
+              data={{ ...form, net_weight: netWeight, shopName, lessWeight }}
             />
           </div>
         </Card>

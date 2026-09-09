@@ -29,13 +29,41 @@ def validate_print_data(data: dict) -> tuple[dict, dict[str, str]]:
     gross, e = validators.parse_weight(data.get("gross_weight"), "Gross")
     if e:
         errors["gross_weight"] = e
-    net, e = validators.parse_weight(data.get("net_weight"), "Net")
-    if e:
-        errors["net_weight"] = e
-    if "gross_weight" not in errors and "net_weight" not in errors:
-        e = validators.validate_weights_relation(gross, net)
+
+    # Net weight is automatic: net = gross - less. The form sends less_weight;
+    # a direct net_weight is still accepted for backwards compatibility.
+    less_raw = data.get("less_weight", None)
+    less_is_given = less_raw is not None and str(less_raw).strip() != ""
+    net = None
+    less = None
+    if less_is_given:
+        less, e = validators.parse_weight(less_raw, "Less")
         if e:
-            errors["net_weight"] = e
+            errors["less_weight"] = e
+        elif "gross_weight" not in errors:
+            if less < 0:
+                errors["less_weight"] = "Less weight cannot be negative."
+            elif less > gross:
+                errors["less_weight"] = "Less weight is more than gross weight. Please check the weights."
+            else:
+                net = gross - less
+    else:
+        net_raw = data.get("net_weight", None)
+        net_is_given = net_raw is not None and str(net_raw).strip() != ""
+        if not net_is_given and "gross_weight" not in errors:
+            # Nothing deducted: less defaults to 0, net equals gross.
+            from decimal import Decimal as _D
+
+            less = _D("0")
+            net = gross
+        else:
+            net, e = validators.parse_weight(net_raw, "Net")
+            if e:
+                errors["net_weight"] = e
+            elif "gross_weight" not in errors:
+                e = validators.validate_weights_relation(gross, net)
+                if e:
+                    errors["net_weight"] = e
 
     copies, e = validators.validate_copies(data.get("copies", 1))
     if e:
@@ -45,7 +73,8 @@ def validate_print_data(data: dict) -> tuple[dict, dict[str, str]]:
         "purity_huid": purity.strip(),
         "product_name": product.strip(),
         "gross_weight": gross if "gross_weight" not in errors else data.get("gross_weight"),
-        "net_weight": net if "net_weight" not in errors else data.get("net_weight"),
+        "less_weight": less if "less_weight" not in errors else (less_raw or ""),
+        "net_weight": net if net is not None else data.get("net_weight"),
         "copies": copies if "copies" not in errors else data.get("copies"),
         "printer_name": str(data.get("printer_name", "") or "").strip(),
     }
@@ -69,11 +98,13 @@ def render_tag(db, cleaned: dict) -> str:
     except ValueError:
         w, h = DEFAULT_TAG_WIDTH_MM, DEFAULT_TAG_HEIGHT_MM
     shop_name = s["shop"].get("name", "")
-    has_logo = bool(s["shop"].get("logo_path", ""))
+    logo_path = s["shop"].get("logo_path", "")
+    has_logo = bool(logo_path)
     tag = build_tag_svg(
         cleaned["purity_huid"], cleaned["product_name"],
         cleaned["gross_weight"], cleaned["net_weight"],
         width_mm=w, height_mm=h, shop_name=shop_name, has_logo=has_logo,
+        logo_path=logo_path,
     )
     try:
         cal = Calibration(

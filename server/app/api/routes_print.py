@@ -46,12 +46,13 @@ def render_tag(req: TagRenderRequest, db: Session = Depends(get_db)):
     except ValueError:
         w, h = DEFAULT_TAG_WIDTH_MM, DEFAULT_TAG_HEIGHT_MM
     shop = req.shop_name if req.shop_name is not None else s["shop"].get("name", "")
+    logo_path = s["shop"].get("logo_path", "")
     return {
         "tag_svg": build_tag_svg(
             req.purity_huid or "", req.product_name or "",
             req.gross_weight if req.gross_weight is not None else "",
             req.net_weight if req.net_weight is not None else "",
             width_mm=w, height_mm=h, shop_name=shop,
-            has_logo=bool(s["shop"].get("logo_path", "")),
+            has_logo=bool(logo_path), logo_path=logo_path,
         ),
     }

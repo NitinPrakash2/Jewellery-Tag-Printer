@@ -55,3 +55,37 @@ def test_valid_payload():
     assert errors == {}
     assert cleaned["purity_huid"] == "18kt HUID"
     assert int(cleaned["copies"]) == 1
+
+
+def test_less_computes_net():
+    cleaned, errors = print_service.validate_print_data({
+        "purity_huid": "18kt HUID", "product_name": "Ring",
+        "gross_weight": "2.146", "less_weight": "0.100", "copies": 1,
+    })
+    assert errors == {}
+    assert str(cleaned["net_weight"]) == "2.046"
+
+
+def test_less_over_gross_rejected():
+    _, errors = print_service.validate_print_data({
+        "purity_huid": "18kt HUID", "product_name": "Ring",
+        "gross_weight": "2.146", "less_weight": "3.000", "copies": 1,
+    })
+    assert "less_weight" in errors
+
+
+def test_less_negative_rejected():
+    _, errors = print_service.validate_print_data({
+        "purity_huid": "18kt HUID", "product_name": "Ring",
+        "gross_weight": "2.146", "less_weight": "-1", "copies": 1,
+    })
+    assert "less_weight" in errors
+
+
+def test_empty_less_defaults_to_zero_net_equals_gross():
+    cleaned, errors = print_service.validate_print_data({
+        "purity_huid": "18kt HUID", "product_name": "Ring",
+        "gross_weight": "2.146", "less_weight": "", "copies": 1,
+    })
+    assert errors == {}
+    assert str(cleaned["net_weight"]) == "2.146"

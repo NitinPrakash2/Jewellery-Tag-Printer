@@ -33,4 +33,14 @@ export const api = {
   settingsAll: () => req("GET", "/api/settings"),
   settingsGet: (cat) => req("GET", `/api/settings/${cat}`),
   settingsPut: (cat, values) => req("PUT", `/api/settings/${cat}`, values),
+  logoGet: () => req("GET", "/api/settings/logo"),
+  logoDelete: () => req("DELETE", "/api/settings/logo"),
+  logoUpload: async (file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(`${BASE}/api/settings/logo`, { method: "POST", body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || "Logo upload failed.");
+    return data;
+  },
 };

@@ -1,6 +1,12 @@
 import { useState } from "react";
 import { Maximize2, Ruler } from "lucide-react";
 
+// Display-only: strip <text> so the tag shell stays clean at any size.
+// The printer still receives the full label WITH text (server output).
+function stripText(svg) {
+  return String(svg || "").replace(/<text[\s\S]*?<\/text>/g, "");
+}
+
 export default function TagPreview({
   tagSvg,
   widthMm = 110,
@@ -66,7 +72,7 @@ export default function TagPreview({
             zoom === "real" ? (
               <div className="overflow-x-auto pb-1">
                 <div className="tag-real mx-auto" style={{ width: `${widthMm}mm`, minWidth: `${widthMm}mm` }}>
-                  <div dangerouslySetInnerHTML={{ __html: tagSvg }} />
+                  <div dangerouslySetInnerHTML={{ __html: stripText(tagSvg) }} />
                 </div>
                 <div className="mt-3 flex justify-center">
                   <Readout rows={rows} />
@@ -74,7 +80,7 @@ export default function TagPreview({
               </div>
             ) : (
               <div className="flex flex-wrap items-center justify-center gap-6">
-                <div className="tag-svg w-full max-w-[560px] flex-1" dangerouslySetInnerHTML={{ __html: tagSvg }} />
+                <div className="tag-svg w-full max-w-[560px] flex-1" dangerouslySetInnerHTML={{ __html: stripText(tagSvg) }} />
                 <Readout rows={rows} />
               </div>
             )
@@ -87,7 +93,7 @@ export default function TagPreview({
       </div>
 
       <div className="text-right text-xs text-slate-400">
-        Print folds at the dashed line — back shows shop + item, front shows weights.
+        Tag text is printed inside the label — shown here outside for clarity.
       </div>
     </div>
   );

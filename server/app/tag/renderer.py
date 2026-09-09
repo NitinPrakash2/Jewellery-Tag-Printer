@@ -85,6 +85,7 @@ def build_tag_svg(
     height_mm: float = DEFAULT_TAG_HEIGHT_MM,
     shop_name: str = "",
     has_logo: bool = False,
+    logo_path: str = "",
 ) -> str:
     w = float(width_mm or DEFAULT_TAG_WIDTH_MM)
     h = float(height_mm or DEFAULT_TAG_HEIGHT_MM)
@@ -105,31 +106,45 @@ def build_tag_svg(
 
     # ---- BACK SIDE ----
     logo_cx = fold_x * 0.27
-    if has_logo and initial:
+    logo_uri = None
+    if has_logo:
+        from app.services.logo_service import load_data_uri
+
+        logo_uri = load_data_uri(logo_path)
+    if logo_uri:
+        # Real uploaded logo replaces the text monogram block entirely.
+        lw, lh = fold_x * 0.48, h * 0.80
         parts.append(
-            f'<text x="{_f(logo_cx)}" y="{_f(h * 0.44)}" text-anchor="middle" '
-            f'font-family="Georgia,serif" font-size="{_f(h * 0.40)}" '
-            f'font-weight="bold" fill="{GOLD}">{_esc(initial)}</text>'
+            f'<image x="{_f(logo_cx - lw / 2)}" y="{_f(h * 0.10)}" '
+            f'width="{_f(lw)}" height="{_f(lh)}" '
+            f'preserveAspectRatio="xMidYMid meet" href="{logo_uri}"/>'
         )
-    if line1:
-        parts.append(
-            f'<text x="{_f(logo_cx)}" y="{_f(h * 0.62)}" text-anchor="middle" '
-            f'font-family="Georgia,serif" font-size="{_f(h * 0.115)}" '
-            f'letter-spacing="1" fill="{GOLD}">{_esc(line1)}</text>'
-        )
-    if line2:
-        lw = fold_x * 0.44
-        parts.append(
-            f'<text x="{_f(logo_cx)}" y="{_f(h * 0.75)}" text-anchor="middle" '
-            f'font-family="Arial,sans-serif" font-size="{_f(h * 0.085)}" '
-            f'letter-spacing="1.5" textLength="{_f(lw)}" '
-            f'lengthAdjust="spacingAndGlyphs" fill="{GOLD}">{_esc(line2)}</text>'
-        )
-        parts.append(
-            f'<text x="{_f(logo_cx)}" y="{_f(h * 0.87)}" text-anchor="middle" '
-            f'font-family="Arial,sans-serif" font-size="{_f(h * 0.06)}" '
-            f'letter-spacing="1">TRUST IN EVERY CARAT</text>'
-        )
+    else:
+        if has_logo and initial:
+            parts.append(
+                f'<text x="{_f(logo_cx)}" y="{_f(h * 0.44)}" text-anchor="middle" '
+                f'font-family="Georgia,serif" font-size="{_f(h * 0.40)}" '
+                f'font-weight="bold" fill="{GOLD}">{_esc(initial)}</text>'
+            )
+        if line1:
+            parts.append(
+                f'<text x="{_f(logo_cx)}" y="{_f(h * 0.62)}" text-anchor="middle" '
+                f'font-family="Georgia,serif" font-size="{_f(h * 0.115)}" '
+                f'letter-spacing="1" fill="{GOLD}">{_esc(line1)}</text>'
+            )
+        if line2:
+            lw = fold_x * 0.44
+            parts.append(
+                f'<text x="{_f(logo_cx)}" y="{_f(h * 0.75)}" text-anchor="middle" '
+                f'font-family="Arial,sans-serif" font-size="{_f(h * 0.085)}" '
+                f'letter-spacing="1.5" textLength="{_f(lw)}" '
+                f'lengthAdjust="spacingAndGlyphs" fill="{GOLD}">{_esc(line2)}</text>'
+            )
+            parts.append(
+                f'<text x="{_f(logo_cx)}" y="{_f(h * 0.87)}" text-anchor="middle" '
+                f'font-family="Arial,sans-serif" font-size="{_f(h * 0.06)}" '
+                f'letter-spacing="1">TRUST IN EVERY CARAT</text>'
+            )
     # vertical divider between logo and item zones
     parts.append(
         f'<line x1="{_f(fold_x * 0.52)}" y1="{_f(h * 0.12)}" '

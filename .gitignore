@@ -42,7 +42,8 @@ yarn-error.log*
 *.sqlite
 *.dump
 
-# Uploaded / local assets (copied shop logos)
+# Uploaded / local assets (shop logo managed by the app)
+server/app_data/
 server/uploads/
 server/assets_local/
 

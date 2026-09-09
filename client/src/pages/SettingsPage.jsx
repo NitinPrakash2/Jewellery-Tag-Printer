@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Check, RefreshCw } from "lucide-react";
+import LogoDropzone from "../components/LogoDropzone.jsx";
 import { Card, Field, Notice, PremiumSelect, TextInput } from "../components/ui.jsx";
 import { api } from "../services/api.js";
 
@@ -17,32 +18,82 @@ export default function SettingsPage({ settings, onSaved }) {
   const [printers, setPrinters] = useState([]);
   const [status, setStatus] = useState(null);
   const [notice, setNotice] = useState(null);
-  const [saving, setSaving] = useState(false);
+  const [noticeCat, setNoticeCat] = useState(null);
+  const [saving, setSaving] = useState(null);
+  const [savedCat, setSavedCat] = useState(null);
+  const [logoUri, setLogoUri] = useState(null);
+  // Guard: never clobber the user's unsaved edits when settings reload
+  // (e.g. after a logo upload). Cleared on successful save.
+  const dirtyRef = useRef(false);
+  const savedTimer = useRef(null);
 
   useEffect(() => {
-    setLocal(settings || {});
+    if (!dirtyRef.current) setLocal(settings || {});
   }, [settings]);
+
+  useEffect(() => () => clearTimeout(savedTimer.current), []);
+
+  useEffect(() => {
+    api.logoGet().then((r) => setLogoUri(r.data_uri || null)).catch(() => setLogoUri(null));
+  }, []);
 
   useEffect(() => {
     api.printers().then((r) => setPrinters(r.printers || [])).catch(() => {});
   }, []);
 
-  const setVal = (cat, key) => (e) =>
+  const setVal = (cat, key) => (e) => {
+    dirtyRef.current = true;
     setLocal((s) => ({ ...s, [cat]: { ...(s[cat] || {}), [key]: e.target.value } }));
-  const setSel = (cat, key) => (value) =>
+  };
+  const setSel = (cat, key) => (value) => {
+    dirtyRef.current = true;
     setLocal((s) => ({ ...s, [cat]: { ...(s[cat] || {}), [key]: value } }));
+  };
+
+  function flashSaved(cat) {
+    setSavedCat(cat);
+    clearTimeout(savedTimer.current);
+    savedTimer.current = setTimeout(() => setSavedCat(null), 2500);
+  }
+
+  function SaveBtn({ cat }) {
+    const done = savedCat === cat;
+    const busy = saving === cat;
+    return (
+      <button
+        onClick={() => save(cat)}
+        disabled={busy}
+        className={`inline-flex min-h-[34px] items-center gap-1.5 rounded-lg px-4 py-1.5 text-[13px] font-medium text-white shadow-sm transition disabled:cursor-not-allowed disabled:opacity-50 ${
+          done ? "bg-green-600 hover:bg-green-600" : "bg-slate-900 hover:bg-slate-700"
+        }`}
+      >
+        {done && <Check size={14} strokeWidth={3} />}
+        {busy ? "Saving…" : done ? "Saved" : "Save"}
+      </button>
+    );
+  }
+
+  function SectionNotice({ cat }) {
+    if (noticeCat !== cat || !notice) return null;
+    return <Notice kind={notice.kind}>{notice.text}</Notice>;
+  }
 
   async function save(cat) {
-    setSaving(true);
+    setSaving(cat);
     setNotice(null);
+    setNoticeCat(null);
     try {
       await api.settingsPut(cat, local[cat] || {});
+      dirtyRef.current = false;
       setNotice({ kind: "success", text: `${cat} settings saved.` });
+      setNoticeCat(cat);
+      flashSaved(cat);
       onSaved?.();
     } catch (e) {
       setNotice({ kind: "error", text: e?.message || `Could not save ${cat} settings.` });
+      setNoticeCat(cat);
     } finally {
-      setSaving(false);
+      setSaving(null);
     }
   }
 
@@ -73,12 +124,9 @@ export default function SettingsPage({ settings, onSaved }) {
     }
   }
 
-  const saveBtn =
-    "rounded-lg bg-gradient-to-r from-slate-700 to-slate-800 px-4 py-2 text-[13px] font-semibold text-white shadow-[0_4px_12px_rgba(15,23,42,0.3)] transition duration-200 hover:from-slate-600 hover:to-slate-700 active:scale-[0.98] disabled:opacity-50";
-
   return (
     <div className="flex flex-col gap-5">
-      {notice && <Notice kind={notice.kind}>{notice.text}</Notice>}
+      {noticeCat === null && notice && <Notice kind={notice.kind}>{notice.text}</Notice>}
 
       <Section title="Printer Configuration">
         <Field label="Selected printer">
@@ -98,8 +146,10 @@ export default function SettingsPage({ settings, onSaved }) {
         <div className="flex flex-wrap gap-2.5">
           <button onClick={checkStatus} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition duration-200 hover:bg-slate-50">Check status</button>
           <button onClick={testPrint} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition duration-200 hover:bg-slate-50">Test print</button>
-          <button onClick={() => save("printer")} disabled={saving} className={saveBtn}>Save</button>
+          <SaveBtn cat="printer" />
+          <SectionNotice cat="printer" />
         </div>
+        <SectionNotice cat="printer" />
         {status && <div className="text-sm bg-slate-50 rounded-lg p-3 text-slate-700 border border-slate-200/60 font-mono">{JSON.stringify(status)}</div>}
       </Section>
 
@@ -123,17 +173,37 @@ export default function SettingsPage({ settings, onSaved }) {
             />
           </Field>
         </div>
-        <div><button onClick={() => save("tag")} disabled={saving} className={saveBtn}>Save</button></div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <SaveBtn cat="tag" />
+          <SectionNotice cat="tag" />
+        </div>
       </Section>
 
       <Section title="Shop Information">
         <Field label="Shop name (prints on back side)">
           <TextInput value={local?.shop?.name || ""} onChange={setVal("shop", "name")} placeholder="XYZ JEWELLERS" />
         </Field>
-        <Field label="Logo path (optional — app never crashes if missing)">
-          <TextInput value={local?.shop?.logo_path || ""} onChange={setVal("shop", "logo_path")} placeholder="C:\…\logo.png" />
-        </Field>
-        <div><button onClick={() => save("shop")} disabled={saving} className={saveBtn}>Save</button></div>
+        <div>
+          <span className="mb-1 block text-[13px] font-medium text-slate-600">Shop logo (prints on the tag)</span>
+          <LogoDropzone
+            dataUri={logoUri}
+            onChanged={(uri, path) => {
+              setLogoUri(uri);
+              // Keep local in sync so a later Save doesn't blank the logo path.
+              // Other unsaved edits (e.g. shop name) are preserved.
+              setLocal((s) => ({ ...s, shop: { ...(s.shop || {}), logo_path: path || "" } }));
+              onSaved?.();
+            }}
+            onError={(msg) => {
+              setNotice({ kind: "error", text: msg });
+              setNoticeCat("shop");
+            }}
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <SaveBtn cat="shop" />
+          <SectionNotice cat="shop" />
+        </div>
       </Section>
 
       <Section title="Print Calibration">
@@ -149,9 +219,10 @@ export default function SettingsPage({ settings, onSaved }) {
             <TextInput value={local?.calibration?.scale || ""} onChange={setVal("calibration", "scale")} inputMode="decimal" placeholder="1.0" />
           </Field>
         </div>
-        <div className="flex flex-wrap gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
           <button onClick={testPrint} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition duration-200 hover:bg-slate-50">Test print</button>
-          <button onClick={() => save("calibration")} disabled={saving} className={saveBtn}>Save</button>
+          <SaveBtn cat="calibration" />
+          <SectionNotice cat="calibration" />
         </div>
       </Section>
 
@@ -171,7 +242,10 @@ export default function SettingsPage({ settings, onSaved }) {
             <TextInput value={local?.app?.default_copies || ""} onChange={setVal("app", "default_copies")} inputMode="numeric" placeholder="1" />
           </Field>
         </div>
-        <div><button onClick={() => save("app")} disabled={saving} className={saveBtn}>Save</button></div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <SaveBtn cat="app" />
+          <SectionNotice cat="app" />
+        </div>
       </Section>
     </div>
   );

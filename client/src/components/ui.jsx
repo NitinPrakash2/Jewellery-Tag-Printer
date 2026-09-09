@@ -27,14 +27,20 @@ export function Row({ label, error, children }) {
 const CONTROL =
   "h-10 rounded-lg border bg-white text-sm text-slate-900 shadow-sm outline-none transition duration-200";
 
-export function TextInput(props) {
+export function TextInput({ suffix, ...props }) {
+  const cls = `${CONTROL} w-full px-3.5 focus:border-slate-700 focus:ring-[3px] focus:ring-slate-200 ${
+    props["data-error"] ? "border-red-400 hover:border-red-500" : "border-slate-300 hover:border-slate-400"
+  } ${suffix ? "pr-9" : ""} ${props.className || ""}`;
+  if (!suffix) {
+    return <input autoComplete="off" {...props} className={cls} />;
+  }
   return (
-    <input
-      {...props}
-      className={`${CONTROL} w-full px-3.5 focus:border-slate-700 focus:ring-[3px] focus:ring-slate-200 ${
-        props["data-error"] ? "border-red-400 hover:border-red-500" : "border-slate-300 hover:border-slate-400"
-      } ${props.className || ""}`}
-    />
+    <div className="relative">
+      <input autoComplete="off" {...props} className={cls} />
+      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[13px] font-semibold text-slate-400">
+        {suffix}
+      </span>
+    </div>
   );
 }
 
