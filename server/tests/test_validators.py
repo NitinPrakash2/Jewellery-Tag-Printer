@@ -89,3 +89,17 @@ def test_empty_less_defaults_to_zero_net_equals_gross():
     })
     assert errors == {}
     assert str(cleaned["net_weight"]) == "2.146"
+
+
+def test_copies_max_limit():
+    # At a time max 99 copies — more is rejected everywhere (form, API, spool).
+    _, errors = print_service.validate_print_data({
+        "purity_huid": "18kt HUID", "product_name": "Ring",
+        "gross_weight": "2.146", "less_weight": "", "copies": 100,
+    })
+    assert "copies" in errors
+    cleaned, errors = print_service.validate_print_data({
+        "purity_huid": "18kt HUID", "product_name": "Ring",
+        "gross_weight": "2.146", "less_weight": "", "copies": 99,
+    })
+    assert errors == {}

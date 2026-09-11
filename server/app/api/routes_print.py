@@ -32,6 +32,7 @@ def validate_only(payload: dict):
 
 @router.post("/tag/render", response_model=dict)
 def render_tag(req: TagRenderRequest, db: Session = Depends(get_db)):
+    from app.printing.calibration import Calibration, apply_calibration
     from app.services import settings_service as ss
     from app.tag.renderer import (
         DEFAULT_TAG_HEIGHT_MM,
@@ -47,12 +48,19 @@ def render_tag(req: TagRenderRequest, db: Session = Depends(get_db)):
         w, h = DEFAULT_TAG_WIDTH_MM, DEFAULT_TAG_HEIGHT_MM
     shop = req.shop_name if req.shop_name is not None else s["shop"].get("name", "")
     logo_path = s["shop"].get("logo_path", "")
-    return {
-        "tag_svg": build_tag_svg(
-            req.purity_huid or "", req.product_name or "",
-            req.gross_weight if req.gross_weight is not None else "",
-            req.net_weight if req.net_weight is not None else "",
-            width_mm=w, height_mm=h, shop_name=shop,
-            has_logo=bool(logo_path), logo_path=logo_path,
-        ),
-    }
+    try:
+        cal = Calibration(
+            offset_x_mm=float(s["calibration"].get("offset_x_mm", 0.0)),
+            offset_y_mm=float(s["calibration"].get("offset_y_mm", 0.0)),
+            scale=float(s["calibration"].get("scale", 1.0)),
+        )
+    except ValueError:
+        cal = Calibration()
+    tag = build_tag_svg(
+        req.purity_huid or "", req.product_name or "",
+        req.gross_weight if req.gross_weight is not None else "",
+        req.net_weight if req.net_weight is not None else "",
+        width_mm=w, height_mm=h, shop_name=shop,
+        has_logo=bool(logo_path), logo_path=logo_path,
+    )
+    return {"tag_svg": apply_calibration(tag, cal)}

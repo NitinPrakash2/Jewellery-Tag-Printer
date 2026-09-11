@@ -9,6 +9,7 @@ Setup required once per printer (Windows Settings > Printers):
   3. Use TEST PRINT in the app and adjust Calibration offsets if needed.
 """
 import io
+import os
 
 from app.logging_setup import log
 from app.printing.printer_adapter import PrinterInfo
@@ -18,12 +19,48 @@ class SpoolError(Exception):
     pass
 
 
+def _ensure_win32_dlls() -> None:
+    """Frozen exe: point Windows at the bundled native DLLs before import.
+
+    PyInstaller 6 puts everything under _internal/ (NOT next to the exe),
+    which Windows does not search by default — so win32ui (needs MFC) and
+    pywin32 DLLs must be registered explicitly. Without this, printing
+    fails on clean PCs while mysteriously working on dev machines.
+    """
+    import sys
+
+    if not getattr(sys, "frozen", False):
+        return
+    candidates = []
+    meipass = getattr(sys, "_MEIPASS", "")
+    if meipass:
+        candidates.append(os.path.join(meipass, "pywin32_system32"))
+        candidates.append(meipass)  # mfc140u.dll and friends live here
+    candidates.append(
+        os.path.join(os.path.dirname(sys.executable), "pywin32_system32")
+    )
+    for cand in candidates:
+        if not cand or not os.path.isdir(cand):
+            continue
+        try:
+            os.add_dll_directory(cand)
+        except Exception:
+            pass
+        path = os.environ.get("PATH", "")
+        if cand.lower() not in path.lower():
+            os.environ["PATH"] = cand + os.pathsep + path
+
+
 def _win32print():
+    _ensure_win32_dlls()
     try:
         import win32print
-    except ImportError:
+    except Exception as exc:
         raise SpoolError(
-            "Windows printing libraries are missing on the server (pywin32)."
+            "Windows printing libraries failed to load "
+            f"({type(exc).__name__}: {str(exc)[:160]}). "
+            "Reinstall the app folder completely (exe + _internal together) "
+            "or install Microsoft Visual C++ Redistributable (vc_redist.x64)."
         )
     return win32print
 
@@ -128,12 +165,18 @@ def _fit_box(img_w: int, img_h: int, page_w: int, page_h: int) -> tuple[int, int
 
 def print_png(printer_name: str, png_bytes: bytes, copies: int = 1) -> str:
     """Spool PNG bytes to the Windows printer. Returns a success message."""
+    _ensure_win32_dlls()
     try:
         import win32con
         import win32ui
         from PIL.ImageWin import Dib
-    except ImportError:
-        raise SpoolError("Windows printing libraries are missing on the server (pywin32).")
+    except Exception as exc:
+        raise SpoolError(
+            "Windows printing libraries failed to load "
+            f"({type(exc).__name__}: {str(exc)[:160]}). "
+            "Install Microsoft Visual C++ Redistributable (vc_redist.x64) once, "
+            "or reinstall the app folder completely (exe + _internal together)."
+        )
     from PIL import Image
 
     copies = max(1, min(int(copies or 1), 99))

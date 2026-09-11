@@ -7,6 +7,7 @@ adapter result, never from the button click.
 from decimal import Decimal
 
 from app.database.repositories import history_repo
+from app.diagnostics import record
 from app.domain import validators
 from app.logging_setup import log
 from app.printing.calibration import Calibration, apply_calibration
@@ -135,6 +136,7 @@ def execute_print(db, adapter, cleaned: dict) -> dict:
     res = adapter.print_svg(printer_name, tag_svg, copies=copies)
     if not res.ok:
         log.error("print failed on %s: %s", printer_name, res.message)
+        record("PRINTER", "error", f"Print failed on '{printer_name}'. {res.message}")
         row = history_repo.create(
             db, purity_huid=cleaned["purity_huid"], product_name=cleaned["product_name"],
             gross_weight=Decimal(str(cleaned["gross_weight"])),
@@ -152,5 +154,7 @@ def execute_print(db, adapter, cleaned: dict) -> dict:
         printer_name=printer_name, template_version=TEMPLATE_VERSION, status="success",
     )
     log.info("print success id=%s printer=%s copies=%s", row.id, printer_name, copies)
+    record("PRINT", "info",
+           f"Printed {copies} copie(s) of '{cleaned['product_name']}' on '{printer_name}'.")
     return {"ok": True, "message": f"Printed {copies} copie(s) on {printer_name}.",
             "history_id": row.id, "tag_svg": tag_svg}

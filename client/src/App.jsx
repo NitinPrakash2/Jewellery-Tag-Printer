@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { History, Printer, Settings } from "lucide-react";
+import { BookOpen, History, Printer, Settings } from "lucide-react";
+import HelpPage from "./pages/HelpPage.jsx";
 import HistoryPage from "./pages/HistoryPage.jsx";
 import PrintPage from "./pages/PrintPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
@@ -9,6 +10,7 @@ const TABS = [
   { id: "print", label: "PRINT", icon: Printer },
   { id: "history", label: "HISTORY", icon: History },
   { id: "settings", label: "SETTINGS", icon: Settings },
+  { id: "help", label: "HELP", icon: BookOpen },
 ];
 
 export default function App() {
@@ -94,7 +96,10 @@ export default function App() {
         {tab === "history" && (
           <HistoryPage reloadKey={historyKey} onReprintLoaded={() => setHistoryKey((k) => k + 1)} />
         )}
-        {tab === "settings" && <SettingsPage settings={settings} onSaved={loadSettings} />}
+        {tab === "settings" && (
+          <SettingsPage settings={settings} onSaved={loadSettings} onGoHelp={() => setTab("help")} />
+        )}
+        {tab === "help" && <HelpPage onGoSettings={() => setTab("settings")} />}
       </main>
     </div>
   );

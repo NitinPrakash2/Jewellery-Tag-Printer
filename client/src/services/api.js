@@ -1,4 +1,7 @@
-const BASE = "";
+ // API base: empty = same origin (desktop .exe / LAN single-URL mode).
+ // For split deploy (e.g. client on Vercel, API on Render), set
+ // VITE_API_URL=https://your-api.onrender.com in the client .env.
+const BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 
 async function req(method, path, body) {
   const res = await fetch(BASE + path, {
@@ -23,6 +26,8 @@ export const api = {
   driverHelp: () => req("GET", "/api/printers/driver-help"),
   usbLive: (printer_name) =>
     req("GET", `/api/printers/usb-live?printer_name=${encodeURIComponent(printer_name || "")}`),
+  diagEvents: (limit = 100) => req("GET", `/api/diagnostics/events?limit=${limit}`),
+  diagClear: () => req("DELETE", "/api/diagnostics/events"),
   print: (payload) => req("POST", "/api/print", payload),
   validate: (payload) => req("POST", "/api/print/validate", payload),
   renderTag: (payload) => req("POST", "/api/tag/render", payload),

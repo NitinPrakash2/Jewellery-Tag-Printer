@@ -14,3 +14,7 @@ svglib==2.2.0
 reportlab==5.0.1
 rlPyCairo==0.4.0
 wmi==1.5.1
+aiofiles==25.1.0
+PySide6==6.11.2
+pyinstaller==6.22.2
+pyinstaller-hooks-contrib==2026.7

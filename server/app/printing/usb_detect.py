@@ -16,6 +16,7 @@ PRINTER_CLASS_GUID = "{4d36e979-e325-11ce-bfc1-08002be10318}"
 MODEL_MATCH: list[tuple[str, tuple[str, ...]]] = [
     ("tvs_lp46neo", ("tvs", "lp 46", "lp46", "snbc")),
     ("dcode_dc423pro", ("dcode", "dc 423", "dc423", "dc 421", "dc421")),
+    ("fourbarcode_4b2054tg", ("4barcode", "4b-2054", "4b2054", "2054tg")),
     ("zebra", ("zebra", "gx420", "gk420", "zd420", "zd410")),
     ("tsc", ("tsc", "te200", "te210", "ttp-244", "ttp244", "dae")),
     ("honeywell", ("honeywell", "intermec", "pc42", "pc43")),
@@ -26,6 +27,23 @@ _NAME_SIGNALS = ("print", "label", "pos", "barcode", "receipt", "zebra",
 
 
 def _wmi():
+    # Uvicorn serves requests on worker threads where COM is not
+    # initialized — WMI fails there without this (CoInitialize error).
+    try:
+        import pythoncom
+
+        try:
+            pythoncom.CoInitialize()
+        except Exception:
+            pass
+    except ImportError:
+        pass
+    try:
+        from app.printing.windows_spool import _ensure_win32_dlls
+
+        _ensure_win32_dlls()
+    except Exception:
+        pass
     try:
         import wmi
     except ImportError:
@@ -111,19 +129,29 @@ def live_status(printer_name: str = "") -> dict:
         dev["driver_key"] = identify_model(dev["name"], dev["device_id"])
     detected = usb_devices[0] if usb_devices else None
     driver_key = (detected or {}).get("driver_key")
-    # Driver counts as installed when the selected printer exists in Windows,
-    # else when an installed printer matches the detected USB model.
+    # Driver counts as installed ONLY when an installed Windows printer
+    # actually matches the detected USB device (or the selected printer).
+    # A different printer (e.g. EPSON inkjet) must NOT mark it installed.
     driver_installed = False
-    if printer_name and installed:
+    if detected:
+        if driver_key:
+            from app.api.routes_printers import DRIVER_HELP
+
+            patterns = DRIVER_HELP.get(driver_key, {}).get("match", [])
+            driver_installed = any(
+                p in n.lower() for n in installed for p in patterns
+            )
+        if not driver_installed:
+            # Fallback: Windows queue usually carries the USB model name.
+            dtokens = {t for t in re.split(r"[^a-z0-9]+", detected.get("name", "").lower()) if len(t) > 3}
+            for n in installed:
+                ntokens = set(re.split(r"[^a-z0-9]+", n.lower()))
+                if dtokens & ntokens:
+                    driver_installed = True
+                    break
+    elif printer_name and installed:
         pl = printer_name.lower()
         driver_installed = any(pl in n.lower() or n.lower() in pl for n in installed)
-    elif driver_key and installed:
-        from app.api.routes_printers import DRIVER_HELP
-
-        patterns = DRIVER_HELP.get(driver_key, {}).get("match", [])
-        driver_installed = any(
-            p in n.lower() for n in installed for p in patterns
-        )
     return {"available": True, "usb_devices": usb_devices, "installed": installed,
             "detected_model": (detected or {}).get("name"),
             "driver_key": driver_key, "driver_installed": driver_installed}

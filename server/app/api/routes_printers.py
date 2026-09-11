@@ -46,12 +46,18 @@ def printer_status(name: str = "", db: Session = Depends(get_db)):
 
 @router.post("/test", response_model=dict)
 def test_print(payload: dict, db: Session = Depends(get_db)):
+    from app.diagnostics import record
+
     target = str((payload or {}).get("printer_name", "") or "").strip()
     if not target:
         target = settings_service.get_category(db, "printer").get("selected", "")
     if not target:
         return {"ok": False, "message": "Please select a printer in Settings first."}
     res = get_adapter().print_test(target)
+    if res.ok:
+        record("PRINT", "info", f"Test print succeeded on '{target}'.")
+    else:
+        record("PRINTER", "error", f"Test print failed on '{target}'. {res.message}")
     return {"ok": res.ok, "message": res.message}
 
 
@@ -77,6 +83,17 @@ DRIVER_HELP = {
             "Back in this app, press Refresh and select your printer below.",
         ],
     },
+    "fourbarcode_4b2054tg": {
+        "name": "4BARCODE 4B-2054TG",
+        "match": ["4barcode", "4b-2054", "4b2054", "2054tg"],
+        "download_url": "https://www.bartendersoftware.com/resources/printer-drivers/4barcode/4barcode-4b-2054tg",
+        "note": "Official Seagull driver page for your exact model — fill the small form, download, run the installer, then connect USB.",
+        "steps": [
+            "Open the official Seagull driver page for 4BARCODE 4B-2054TG (Download button above).",
+            "Download and run the installer, choosing 4B-2054TG when asked for the model.",
+            "Connect the printer via USB, finish setup, then press Refresh in this app and select it.",
+        ],
+    },
 }
 
 
@@ -89,9 +106,21 @@ def driver_help():
 def usb_live(printer_name: str = ""):
     """Live USB detection: what printer is plugged in right now, which model
     it looks like, and whether its driver is installed. Polled by the UI."""
+    from app.diagnostics import record
     from app.printing import usb_detect
 
-    return usb_detect.live_status(printer_name.strip())
+    out = usb_detect.live_status(printer_name.strip())
+    # Record only transitions so the 3-second poll doesn't flood the feed.
+    global _usb_last_available
+    try:
+        _usb_last_available
+    except NameError:
+        _usb_last_available = None
+    if out.get("available") != _usb_last_available:
+        _usb_last_available = out.get("available")
+        if out.get("available") is False:
+            record("USB", "warning", "USB watching is unavailable on this machine. Use Run Setup instead.")
+    return out
 
 
 @router.post("/setup", response_model=dict)
@@ -118,10 +147,13 @@ def setup_printer(payload: dict, db: Session = Depends(get_db)):
     steps: list[dict] = []
 
     # Step 1: printer detected?
+    from app.diagnostics import record as _record
+
     try:
         info = get_adapter().get_status(target)
         detected = info.status != "not-detected" and info.status != "not-found"
     except PrinterNotFound as exc:
+        _record("PRINTER", "error", f"Setup: printer not found. {exc}")
         return {"ok": False, "steps": [{
             "key": "detect", "ok": False,
             "message": str(exc) + " Install the driver (see Driver Help), then Refresh."}],
@@ -130,6 +162,7 @@ def setup_printer(payload: dict, db: Session = Depends(get_db)):
                   "message": f"Printer '{target}' found." if detected
                   else f"Printer '{target}' is not responding. Power it on and check USB."})
     if not detected:
+        _record("PRINTER", "error", f"Setup: '{target}' is not responding. Power it on and check USB.")
         return {"ok": False, "steps": steps, "message": steps[-1]["message"]}
 
     # Step 2: label size (automatic, no Windows Settings needed).
@@ -139,6 +172,7 @@ def setup_printer(payload: dict, db: Session = Depends(get_db)):
                   "form_name": size.get("form_name", ""),
                   "message": size.get("message", "")})
     if not size.get("ok"):
+        _record("PRINTER", "error", f"Setup: label size failed. {size.get('message', '')}")
         return {"ok": False, "steps": steps, "message": size.get("message", "")}
 
     # Step 3: readiness from live status.
@@ -152,7 +186,17 @@ def setup_printer(payload: dict, db: Session = Depends(get_db)):
         steps.append({"key": "ready", "ok": False, "message": str(exc)})
         return {"ok": False, "steps": steps, "message": str(exc)}
 
-    return {"ok": all(s["ok"] for s in steps), "steps": steps,
+    from app.diagnostics import record as _record
+
+    final_ok = all(s["ok"] for s in steps)
+    if final_ok:
+        _record("PRINTER", "info",
+                f"Setup complete on '{target}' (label size {size.get('form_name', '')}).")
+    else:
+        _record("PRINTER", "error",
+                f"Setup on '{target}' needs attention: " + "; ".join(
+                    s["message"] for s in steps if not s["ok"]))
+    return {"ok": final_ok, "steps": steps,
             "form_name": size.get("form_name", ""),
-            "message": "Setup complete. Run a Test Print to confirm." if all(s["ok"] for s in steps)
+            "message": "Setup complete. Run a Test Print to confirm." if final_ok
             else "Setup finished with warnings — see steps."}

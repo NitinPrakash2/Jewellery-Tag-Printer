@@ -61,7 +61,7 @@ function tagShell(w, h) {
   );
 }
 
-export function buildTagSvg({ purity_huid, product_name, gross_weight, net_weight, shop_name = "", width_mm = 110, height_mm = 12, has_logo = false, logo_image = null }) {
+export function buildTagSvg({ purity_huid, product_name, gross_weight, net_weight, shop_name = "", width_mm = 110, height_mm = 12, has_logo = false, logo_image = null, cal_x_mm = 0, cal_y_mm = 0, cal_scale = 1 }) {
   const w = Number(width_mm) || 110;
   const h = Number(height_mm) || 12;
   const f = (n) => +n.toFixed(2);
@@ -70,8 +70,12 @@ export function buildTagSvg({ purity_huid, product_name, gross_weight, net_weigh
   const { initial, line1, line2 } = brandParts(shop_name);
   const less = computeLess(gross_weight, net_weight);
 
+  // Calibration: same transform as the server — preview and paper agree.
+  const calOx = Number(cal_x_mm) || 0;
+  const calOy = Number(cal_y_mm) || 0;
+  const calSc = Number(cal_scale) || 1;
+
   let s =
-    `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}" data-side="fold-tag">` +
     tagShell(w, h) +
     `<line x1="${f(foldX)}" y1="${f(h * 0.06)}" x2="${f(foldX)}" y2="${f(h * 0.94)}" stroke="black" stroke-width="0.3" stroke-dasharray="1.2 0.8"/>`;
 
@@ -118,5 +122,16 @@ export function buildTagSvg({ purity_huid, product_name, gross_weight, net_weigh
     s += `<text x="${f(foldX + fw * 0.94)}" y="${y}" text-anchor="end" font-family="Arial,sans-serif" font-size="${fs}" font-weight="bold" textLength="${f(fw * 0.36)}" lengthAdjust="spacingAndGlyphs">${esc(value)}</text>`;
   }
 
-  return s + `</svg>`;
+  let inner = s;
+  const t = [];
+  if (calOx || calOy) t.push(`translate(${calOx} ${calOy})`);
+  if (calSc !== 1)
+    t.push(`translate(${w / 2} ${h / 2}) scale(${calSc}) translate(${-w / 2} ${-h / 2})`);
+  if (t.length > 0) inner = `<g transform="${t.join(" ")}">${s}</g>`;
+
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}" data-side="fold-tag">` +
+    inner +
+    `</svg>`
+  );
 }

@@ -59,6 +59,7 @@ def test_discover_lists_placeholders():
     names = [p.name for p in LP46NeoAdapter().discover_printers()]
     assert "TVS LP 46 Neo (not detected)" in names
     assert "DCode DC 423 Pro (not detected)" in names
+    assert "4BARCODE 4B-2054TG (not detected)" in names
 
 
 def test_discover_hides_virtual_printers():

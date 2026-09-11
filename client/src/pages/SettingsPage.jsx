@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, RefreshCw } from "lucide-react";
+import { BookOpen, Check, RefreshCw } from "lucide-react";
 import LogoDropzone from "../components/LogoDropzone.jsx";
+import ErrorMonitor from "../components/ErrorMonitor.jsx";
 import PrinterSetupWizard from "../components/PrinterSetupWizard.jsx";
 import UsbLivePanel from "../components/UsbLivePanel.jsx";
 import { Card, Field, Notice, PremiumSelect, groupPrinterOptions, TextInput } from "../components/ui.jsx";
@@ -63,7 +64,7 @@ function PrinterStatusCard({ status }) {
   );
 }
 
-export default function SettingsPage({ settings, onSaved }) {
+export default function SettingsPage({ settings, onSaved, onGoHelp }) {
   const [local, setLocal] = useState(settings || {});
   const [printers, setPrinters] = useState([]);
   const [status, setStatus] = useState(null);
@@ -90,8 +91,14 @@ export default function SettingsPage({ settings, onSaved }) {
     api.logoGet().then((r) => setLogoUri(r.data_uri || null)).catch(() => setLogoUri(null));
   }, []);
 
+  // Silent background refresh: the printer dropdown updates by itself
+  // when a printer is installed/connected — no Refresh click needed.
   useEffect(() => {
     api.printers().then((r) => setPrinters(r.printers || [])).catch(() => {});
+    const t = setInterval(() => {
+      api.printers().then((r) => setPrinters(r.printers || [])).catch(() => {});
+    }, 6000);
+    return () => clearInterval(t);
   }, []);
 
   const setVal = (cat, key) => (e) => {
@@ -220,6 +227,16 @@ export default function SettingsPage({ settings, onSaved }) {
       {noticeCat === null && notice && <Notice kind={notice.kind}>{notice.text}</Notice>}
 
       <Section title="Printer Configuration">
+        <button
+          onClick={onGoHelp}
+          className="flex items-center justify-between gap-2 rounded-xl border border-slate-900 bg-slate-900 px-4 py-2.5 text-left text-sm font-semibold text-white shadow-sm transition hover:bg-slate-700 active:scale-[0.99]"
+        >
+          <span className="flex items-center gap-2">
+            <BookOpen size={16} />
+            How to connect printer? Step-by-step guide
+          </span>
+          <span aria-hidden>→</span>
+        </button>
         <UsbLivePanel
           printerName={local?.printer?.selected || ""}
           widthMm={local?.tag?.width_mm || ""}
@@ -261,8 +278,8 @@ export default function SettingsPage({ settings, onSaved }) {
           <SaveBtn cat="printer" />
           <SectionNotice cat="printer" />
         </div>
-        <SectionNotice cat="printer" />
         {status && <PrinterStatusCard status={status} />}
+        <ErrorMonitor />
       </Section>
 
       <Section title="Tag Dimensions">
@@ -340,17 +357,7 @@ export default function SettingsPage({ settings, onSaved }) {
 
       <Section title="Application Preferences">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Theme">
-            <PremiumSelect
-              value={local?.app?.theme || "light"}
-              onChange={setSel("app", "theme")}
-              options={[
-                { value: "light", label: "Light" },
-                { value: "dark", label: "Dark" },
-              ]}
-            />
-          </Field>
-          <Field label="Default copies">
+          <Field label="Default copies (prefilled on the Print page)">
             <TextInput value={local?.app?.default_copies || ""} onChange={setVal("app", "default_copies")} inputMode="numeric" placeholder="1" />
           </Field>
         </div>

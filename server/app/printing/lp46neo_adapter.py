@@ -39,14 +39,15 @@ class LP46NeoAdapter(PrinterAdapter):
         except Exception:
             default = ""
         out = [PrinterInfo(name=n, is_default=(n == default), status="ready") for n in names]
-        if not any("LP 46" in n or "LP46" in n for n in names):
-            out.append(
-                PrinterInfo(name="TVS LP 46 Neo (not detected)", status="not-detected")
-            )
-        if not any("DCODE" in n.upper() or "DC 423" in n.upper() or "DC423" in n.upper() for n in names):
-            out.append(
-                PrinterInfo(name="DCode DC 423 Pro (not detected)", status="not-detected")
-            )
+        # Known models appear as one-click setup targets even before install.
+        placeholders = [
+            ("TVS LP 46 Neo", ("LP 46", "LP46")),
+            ("DCode DC 423 Pro", ("DCODE", "DC 423", "DC423", "DC 421", "DC421")),
+            ("4BARCODE 4B-2054TG", ("4BARCODE", "4B-2054", "4B2054", "2054TG")),
+        ]
+        for label, patterns in placeholders:
+            if not any(any(p in n.upper() for p in patterns) for n in names):
+                out.append(PrinterInfo(name=f"{label} (not detected)", status="not-detected"))
         return out
 
     def get_status(self, printer_name: str) -> PrinterInfo:

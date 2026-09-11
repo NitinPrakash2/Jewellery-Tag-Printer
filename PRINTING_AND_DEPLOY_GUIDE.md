@@ -114,11 +114,40 @@ npm run build
 This produces `client/dist/`. Serve it with any static server
 (e.g. `npx serve dist -l 5173`), or pack it into the `.exe` later.
 
-### 3.4 Daily operation (shopkeeper)
+### 3.4 Shop LAN mode — one live URL for every laptop (recommended)
+
+The server also serves the built app, so a single URL opens the full
+application from any laptop on the shop WiFi. Printing always happens on
+the PC the printer is USB-connected to.
+
+One-time (Administrator PowerShell in `server/`):
+
+```powershell
+.\allow-lan.ps1
+```
+
+Daily (double-click `server/start-lan.bat`, after putting the real DB
+password in it once):
+
+```bat
+set DATABASE_URL=postgresql+psycopg2://postgres:YOUR_PASSWORD@localhost:5432/jewellery_tags
+set CORS_ORIGINS=*
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+Then any laptop on the same WiFi opens `http://<shop-pc-ip>:8000`
+(the server log prints the exact address at startup). No `npm`/Vite needed
+on those laptops — just a browser.
+
+> Security: LAN mode has no login — anyone on the shop network can print.
+> Perfect for one shop; never expose port 8000 directly to the internet
+> without adding authentication.
+
+### 3.5 Daily operation (single PC)
 
 1. PostgreSQL starts automatically with Windows.
-2. Run the server command from 3.2.
-3. Open `http://localhost:5173` in the browser. Done.
+2. Run the server (3.2 command or `start-lan.bat`).
+3. Open `http://localhost:8000` in the browser. Done.
 
 > Note: the Vite dev server hot-reloads the client automatically, but the
 > API server (uvicorn) must be **restarted** after any change inside `server/`.
@@ -184,3 +213,39 @@ login/auth, cloud sync, `.exe` packaging (comes after hardware sign-off).
 - [ ] Confirm the exact label size with the real media (defaults: 110×12 mm)
 - [ ] Settle calibration offsets (horizontal/vertical mm) if needed
 - [ ] Then: PySide6 desktop shell + PyInstaller `.exe` packaging
+
+---
+
+## 8. Desktop .exe (no installs, no code sharing) — DONE
+
+`server/dist/ManishTagPrinter/` is the shippable app (~640 MB unzipped,
+mostly Qt WebEngine; zips much smaller).
+
+**What's inside:** backend API + built UI + SQLite database file
+(auto-created next to the exe on first run) + desktop window. Double-click
+`ManishTagPrinter.exe` — no Python, PostgreSQL, Node or browser needed.
+
+**How it was verified:** `ManishTagPrinter.exe --smoke-test` boots the frozen
+backend and checks `/`, `/api/health`, `/api/printers`, `/api/settings`
+(SMOKE PASS, exit 0). Rebuild any time with:
+
+```powershell
+cd server
+python -m PyInstaller --noconfirm --clean --name ManishTagPrinter --windowed --onedir --add-data "..\client\dist;client\dist" --add-data "alembic.ini;." --add-data "alembic;alembic" --add-binary "C:\Windows\System32\mfc140u.dll;." --hidden-import sqlalchemy.dialects.sqlite.pysqlite --hidden-import sqlalchemy.dialects.postgresql.psycopg2 desktop.py
+```
+
+**Dual-database rule (one codebase, two targets):**
+
+| Target | DATABASE_URL | Client |
+|---|---|---|
+| `.exe` (friend/shop, zero-install) | `sqlite:///./app_data/tagprinter.db` (automatic when frozen) | Bundled inside, opens in app window |
+| Deploy: API on Render + client on Vercel | `postgresql+...` (Render env var) | `VITE_API_URL=https://your-api.onrender.com` at client build time + Render `CORS_ORIGINS=https://your-app.vercel.app` |
+
+All 69 tests pass on **both** backends. SQLite note: timestamps come back
+timezone-naive (SQLite has no TIMESTAMPTZ) — ordering/search unaffected.
+
+**Known frozen-exe lessons (don't regress):**
+- Pass the FastAPI app OBJECT to uvicorn (import strings fail when frozen).
+- `log_config=None` on uvicorn (its dictConfig breaks when frozen).
+- PyInstaller 6 puts datas under `_internal/` — paths go through `sys._MEIPASS`
+  (`CLIENT_DIST_DIR` env override exists for this).

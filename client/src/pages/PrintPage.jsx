@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Eye, Printer, RotateCcw, Settings as SettingsIcon, Tag, X } from "lucide-react";
 import TagPreview from "../components/TagPreview.jsx";
 import {
@@ -46,6 +46,17 @@ const EMPTY = { purity_huid: "", product_name: "", gross_weight: "", less_weight
 
 export default function PrintPage({ settings, onSettingsSaved, refreshHistorySignal }) {
   const [form, setForm] = useState(EMPTY);
+  // Prefill copies from Settings → Application → Default copies (once).
+  const copiesInitRef = useRef(false);
+  useEffect(() => {
+    if (!copiesInitRef.current && settings?.app?.default_copies) {
+      const n = parseInt(settings.app.default_copies, 10);
+      if (Number.isFinite(n) && n >= 1 && n <= 99) {
+        copiesInitRef.current = true;
+        setForm((f) => ({ ...f, copies: String(n) }));
+      }
+    }
+  }, [settings]);
   const [purityMode, setPurityMode] = useState("preset"); // preset | custom
   const [errors, setErrors] = useState({});
   const [notice, setNotice] = useState(null);
@@ -121,6 +132,11 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
 
   useEffect(() => {
     loadPrinters();
+    // Silent background refresh so the dropdown always mirrors Windows.
+    const t = setInterval(() => {
+      loadPrinters();
+    }, 8000);
+    return () => clearInterval(t);
   }, [loadPrinters]);
   useEffect(() => {
     checkPrinter();
@@ -159,8 +175,11 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
         height_mm: tagH,
         has_logo: hasLogo,
         logo_image: logoImageData,
+        cal_x_mm: settings?.calibration?.offset_x_mm,
+        cal_y_mm: settings?.calibration?.offset_y_mm,
+        cal_scale: settings?.calibration?.scale,
       }),
-    [form.purity_huid, form.product_name, form.gross_weight, netWeight, shopName, tagW, tagH, hasLogo, logoImageData]
+    [form.purity_huid, form.product_name, form.gross_weight, netWeight, shopName, tagW, tagH, hasLogo, logoImageData, settings]
   );
   const lessWeight = useMemo(
     () => computeLess(form.gross_weight, netWeight),
