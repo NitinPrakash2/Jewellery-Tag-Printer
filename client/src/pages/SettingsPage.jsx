@@ -75,14 +75,23 @@ export default function SettingsPage({ settings, onSaved, onGoHelp }) {
   const [savedCat, setSavedCat] = useState(null);
   const [logoUri, setLogoUri] = useState(null);
   // Guard: never clobber the user's unsaved edits when settings reload
-  // (e.g. after a logo upload). Cleared on successful save.
-  const dirtyRef = useRef(false);
+  // (e.g. after a logo upload) — tracked PER CATEGORY so other sections
+  // still sync live (e.g. tail saved from the Print page appears here).
+  // A category's flag clears on its successful save.
+  const dirtyRef = useRef({});
   const savedTimer = useRef(null);
   // Printers already auto-selected this session (don't nag / re-fire).
   const autoTriedRef = useRef(new Set());
 
   useEffect(() => {
-    if (!dirtyRef.current) setLocal(settings || {});
+    if (!settings) return;
+    setLocal((prev) => {
+      const next = { ...(settings || {}) };
+      for (const cat of Object.keys(dirtyRef.current)) {
+        if (dirtyRef.current[cat] && prev[cat]) next[cat] = prev[cat];
+      }
+      return next;
+    });
   }, [settings]);
 
   useEffect(() => () => clearTimeout(savedTimer.current), []);
@@ -102,11 +111,11 @@ export default function SettingsPage({ settings, onSaved, onGoHelp }) {
   }, []);
 
   const setVal = (cat, key) => (e) => {
-    dirtyRef.current = true;
+    dirtyRef.current[cat] = true;
     setLocal((s) => ({ ...s, [cat]: { ...(s[cat] || {}), [key]: e.target.value } }));
   };
   const setSel = (cat, key) => (value) => {
-    dirtyRef.current = true;
+    dirtyRef.current[cat] = true;
     setLocal((s) => ({ ...s, [cat]: { ...(s[cat] || {}), [key]: value } }));
   };
 
@@ -144,7 +153,7 @@ export default function SettingsPage({ settings, onSaved, onGoHelp }) {
     setNoticeCat(null);
     try {
       await api.settingsPut(cat, local[cat] || {});
-      dirtyRef.current = false;
+      dirtyRef.current[cat] = false;
       setNotice({ kind: "success", text: `${cat} settings saved.` });
       setNoticeCat(cat);
       flashSaved(cat);
@@ -284,12 +293,15 @@ export default function SettingsPage({ settings, onSaved, onGoHelp }) {
 
       <Section title="Tag Dimensions">
         <p className="mb-2 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200/60 rounded-lg px-3 py-2">⚠️ NEEDS HARDWARE VALIDATION — confirm with real label stock</p>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="Width (mm)">
-            <TextInput value={local?.tag?.width_mm || ""} onChange={setVal("tag", "width_mm")} inputMode="decimal" placeholder="50" />
+            <TextInput value={local?.tag?.width_mm || ""} onChange={setVal("tag", "width_mm")} inputMode="decimal" placeholder="100" />
           </Field>
           <Field label="Height (mm)">
-            <TextInput value={local?.tag?.height_mm || ""} onChange={setVal("tag", "height_mm")} inputMode="decimal" placeholder="25" />
+            <TextInput value={local?.tag?.height_mm || ""} onChange={setVal("tag", "height_mm")} inputMode="decimal" placeholder="15" />
+          </Field>
+          <Field label="Tail (mm, fold only — no print)">
+            <TextInput value={local?.tag?.tail_width_mm || ""} onChange={setVal("tag", "tail_width_mm")} inputMode="decimal" placeholder="35" />
           </Field>
           <Field label="Orientation">
             <PremiumSelect
@@ -337,6 +349,15 @@ export default function SettingsPage({ settings, onSaved, onGoHelp }) {
 
       <Section title="Print Calibration">
         <p className="mb-3 text-xs text-slate-600 font-medium">Adjust offsets in millimetres to fine-tune print alignment:</p>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-3 text-[13px] leading-relaxed text-slate-600">
+          <span className="font-bold text-slate-800">How to use:</span> If the print comes out slightly shifted left-right or up-down, fix it here.
+          <span className="font-semibold text-slate-800"> Horizontal offset</span> moves the print left-right (positive = right, negative = left),
+          <span className="font-semibold text-slate-800"> Vertical offset</span> moves it up-down (positive = down, negative = up).
+          First press <span className="font-semibold text-slate-800">Test print</span>, see how far it is shifted, enter that number in mm,
+          press <span className="font-semibold text-slate-800">Save</span>, then Test print again to confirm.
+          Keep <span className="font-semibold text-slate-800">Scale</span> at 1.0 — touch it only if the whole print looks too small or too big.
+          These values apply to every print automatically, no need to enter them again.
+        </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Field label="Horizontal offset">
             <TextInput value={local?.calibration?.offset_x_mm || ""} onChange={setVal("calibration", "offset_x_mm")} inputMode="decimal" placeholder="0" />

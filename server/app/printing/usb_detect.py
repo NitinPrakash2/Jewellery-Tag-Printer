@@ -14,7 +14,7 @@ PRINTER_CLASS_GUID = "{4d36e979-e325-11ce-bfc1-08002be10318}"
 
 # (driver key, name patterns) — first match wins.
 MODEL_MATCH: list[tuple[str, tuple[str, ...]]] = [
-    ("tvs_lp46neo", ("tvs", "lp 46", "lp46", "snbc")),
+    ("tvs_lp46neo", ("tvs", "tvse", "lp 46", "lp46", "snbc", "bple")),
     ("dcode_dc423pro", ("dcode", "dc 423", "dc423", "dc 421", "dc421")),
     ("fourbarcode_4b2054tg", ("4barcode", "4b-2054", "4b2054", "2054tg")),
     ("zebra", ("zebra", "gx420", "gk420", "zd420", "zd410")),

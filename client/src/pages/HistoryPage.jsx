@@ -114,10 +114,10 @@ export default function HistoryPage({ reloadKey, onReprintLoaded }) {
               {items.map((r) => (
                 <tr key={r.id} className="border-b border-slate-100/60 transition duration-150 last:border-0 hover:bg-gradient-to-r hover:from-blue-50/40 hover:to-indigo-50/20">
                   <td className="px-4 py-3 text-slate-600">{fmtDate(r.printed_at)}</td>
-                  <td className="px-4 py-3 font-semibold text-slate-900">{r.product_name}</td>
-                  <td className="px-4 py-3 text-slate-700">{r.purity_huid}</td>
-                  <td className="px-4 py-3 text-slate-700">{r.gross_weight} g</td>
-                  <td className="px-4 py-3 text-slate-700">{r.net_weight} g</td>
+                  <td className="px-4 py-3 font-semibold text-slate-900">{r.product_name || "—"}</td>
+                  <td className="px-4 py-3 text-slate-700">{r.purity_huid || "—"}</td>
+                  <td className="px-4 py-3 text-slate-700">{r.gross_weight != null ? `${r.gross_weight} g` : "—"}</td>
+                  <td className="px-4 py-3 text-slate-700">{r.net_weight != null ? `${r.net_weight} g` : "—"}</td>
                   <td className="px-4 py-3 font-semibold text-slate-900">{r.copies}</td>
                   <td className="px-4 py-3 text-slate-700">{r.printer_name}</td>
                   <td className="px-4 py-3">

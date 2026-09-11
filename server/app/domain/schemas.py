@@ -19,8 +19,8 @@ class HistoryOut(BaseModel):
     id: int
     purity_huid: str
     product_name: str
-    gross_weight: Decimal
-    net_weight: Decimal
+    gross_weight: Optional[Decimal] = None
+    net_weight: Optional[Decimal] = None
     copies: int
     printer_name: str
     template_version: str
@@ -36,6 +36,7 @@ class TagRenderRequest(BaseModel):
     product_name: str = ""
     gross_weight: Optional[Decimal] = None
     net_weight: Optional[Decimal] = None
+    less_weight: Optional[str] = None
     shop_name: Optional[str] = None
     tag_width_mm: Optional[float] = None
     tag_height_mm: Optional[float] = None

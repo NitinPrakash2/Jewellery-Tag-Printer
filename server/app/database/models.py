@@ -15,10 +15,11 @@ class PrintHistory(Base):
     __tablename__ = "print_history"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    purity_huid: Mapped[str] = mapped_column(String(120), nullable=False)
-    product_name: Mapped[str] = mapped_column(String(120), nullable=False)
-    gross_weight: Mapped[float] = mapped_column(Numeric(10, 3), nullable=False)
-    net_weight: Mapped[float] = mapped_column(Numeric(10, 3), nullable=False)
+    purity_huid: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    product_name: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    # Weights are optional: blank inputs print nothing and store NULL.
+    gross_weight: Mapped[float | None] = mapped_column(Numeric(10, 3), nullable=True)
+    net_weight: Mapped[float | None] = mapped_column(Numeric(10, 3), nullable=True)
     copies: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     printer_name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
     template_version: Mapped[str] = mapped_column(String(50), nullable=False, default="v1")

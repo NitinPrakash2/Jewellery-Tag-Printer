@@ -131,7 +131,11 @@ export function PremiumSelect({ value, onChange, options, placeholder = "— Sel
     const onKey = (e) => {
       if (e.key === "Escape") setOpen(false);
     };
-    const onScroll = () => setOpen(false);
+    const onScroll = (e) => {
+      // Scrolling INSIDE the menu must not close it — only page scrolls do.
+      if (menuRef.current?.contains(e.target)) return;
+      setOpen(false);
+    };
     document.addEventListener("mousedown", close);
     document.addEventListener("keydown", onKey);
     window.addEventListener("scroll", onScroll, true);

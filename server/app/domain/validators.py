@@ -7,18 +7,16 @@ MAX_WEIGHT = Decimal("99999.999")
 
 
 def validate_purity_huid(value: str) -> str:
+    # Optional: blank fields simply don't print. Only length is enforced.
     v = (value or "").strip()
-    if not v:
-        return "Please enter purity / HUID (e.g. 18kt HUID)."
     if len(v) > MAX_TEXT_LEN:
         return f"Purity / HUID is too long (max {MAX_TEXT_LEN} characters)."
     return ""
 
 
 def validate_product_name(value: str) -> str:
+    # Optional: blank fields simply don't print. Only length is enforced.
     v = (value or "").strip()
-    if not v:
-        return "Please enter product name (e.g. Ring)."
     if len(v) > MAX_TEXT_LEN:
         return f"Product name is too long (max {MAX_TEXT_LEN} characters)."
     return ""

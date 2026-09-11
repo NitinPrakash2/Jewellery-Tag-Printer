@@ -37,6 +37,7 @@ def render_tag(req: TagRenderRequest, db: Session = Depends(get_db)):
     from app.tag.renderer import (
         DEFAULT_TAG_HEIGHT_MM,
         DEFAULT_TAG_WIDTH_MM,
+        DEFAULT_TAIL_MM,
         build_tag_svg,
     )
 
@@ -44,8 +45,9 @@ def render_tag(req: TagRenderRequest, db: Session = Depends(get_db)):
     try:
         w = req.tag_width_mm or float(s["tag"].get("width_mm", DEFAULT_TAG_WIDTH_MM))
         h = req.tag_height_mm or float(s["tag"].get("height_mm", DEFAULT_TAG_HEIGHT_MM))
+        tail = float(s["tag"].get("tail_width_mm", DEFAULT_TAIL_MM))
     except ValueError:
-        w, h = DEFAULT_TAG_WIDTH_MM, DEFAULT_TAG_HEIGHT_MM
+        w, h, tail = DEFAULT_TAG_WIDTH_MM, DEFAULT_TAG_HEIGHT_MM, DEFAULT_TAIL_MM
     shop = req.shop_name if req.shop_name is not None else s["shop"].get("name", "")
     logo_path = s["shop"].get("logo_path", "")
     try:
@@ -56,11 +58,27 @@ def render_tag(req: TagRenderRequest, db: Session = Depends(get_db)):
         )
     except ValueError:
         cal = Calibration()
+    show_less = not (req.less_weight is not None and str(req.less_weight).strip() == "")
+    gross_in = req.gross_weight if req.gross_weight is not None else ""
+    net_in = req.net_weight if req.net_weight is not None else ""
+    show_gross = str(gross_in).strip() != ""
+    show_net = str(net_in).strip() != ""
     tag = build_tag_svg(
         req.purity_huid or "", req.product_name or "",
-        req.gross_weight if req.gross_weight is not None else "",
-        req.net_weight if req.net_weight is not None else "",
+        gross_in, net_in,
         width_mm=w, height_mm=h, shop_name=shop,
-        has_logo=bool(logo_path), logo_path=logo_path,
+        has_logo=bool(logo_path), logo_path=logo_path, show_less=show_less,
+        tail_mm=tail, show_gross=show_gross, show_net=show_net,
     )
-    return {"tag_svg": apply_calibration(tag, cal)}
+    from app.tag.layout import layout_warnings
+    from app.tag.renderer import brand_parts
+
+    initial, line1, line2 = brand_parts(shop)
+    warnings = layout_warnings(w, h, {
+        "purity": req.purity_huid or "", "product": req.product_name or "",
+        "gross": f"{gross_in} g" if str(gross_in).strip() else "",
+        "less": "",
+        "net": f"{net_in} g" if str(net_in).strip() else "",
+        "shop_l1": line1, "shop_l2": line2, "initial": initial,
+    }, show_less=show_less, tail_mm=tail)
+    return {"tag_svg": apply_calibration(tag, cal), "warnings": warnings}

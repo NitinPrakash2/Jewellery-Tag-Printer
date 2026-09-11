@@ -17,7 +17,7 @@ Live preview updates on every keystroke (same SVG the printer will get)
         ↓  PRINT TAG pressed
 POST /api/print  →  server validates in milliseconds
         ↓
-Server renders the fold-tag SVG (back + dashed fold line + front + tail)
+Server renders the fold-tag SVG (back + dashed fold line + front, body-only)
   - Less Wt = Gross − Net, formatted to 3 decimals
   - Shop logo embedded as base64 (or monogram fallback if missing)
         ↓
@@ -179,6 +179,7 @@ After that, daily work is: fill 5 fields → **Print Tag** → collect the label
 | Printer is off or unplugged | Switch the printer on and check the USB cable. |
 | Right edge is cut off | Tag is wider than the printer's maximum (DCode: 104 mm). Press "Use … instead". |
 | Print is slightly shifted | Settings → Calibration: try 0.5–1 mm offsets + Test Print. |
+| Print too light / thin text | Windows printer Printing preferences → raise Density/Darkness. All label text prints bold by design. |
 | Red "server offline" dot | The server terminal was closed — restart it (3.2 / 3.4). |
 | Dropdown hides behind cards | Fixed — menus render in a top layer and flip upward near the screen bottom. |
 
@@ -192,6 +193,7 @@ After that, daily work is: fill 5 fields → **Print Tag** → collect the label
 - Settings APIs: shop / printer / tag / calibration / app (validated, shop-friendly errors)
 - Printer APIs: discovery, live status, test print, one-click setup (auto label size), driver-help links, per-printer max-width limits
 - Logo upload API (PNG/JPG/SVG ≤ 2 MB, content-validated, stored in managed folder, embedded base64 at render time; missing logo never crashes)
+- Auto-fit layout engine (`app/tag/layout.py`, mirrored in the client): the user enters W×H only, every font is computed to fit and centre its zone — no textLength hacks (print rasters ignore those), so preview and paper agree
 - Less Wt input with automatic Net calculation (`net = gross − less`); legacy `net_weight` payloads still accepted
 - Rotating log files, no hard-coded secrets, **52 automated tests — all passing**
 
@@ -210,7 +212,7 @@ login/auth, cloud sync, `.exe` packaging (comes after hardware sign-off).
 ## 7. Before production sign-off
 
 - [ ] Run Test Print on the real shop printer and confirm alignment on real label stock
-- [ ] Confirm the exact label size with the real media (defaults: 110×12 mm)
+- [ ] Confirm the exact label size with the real media (current label: 100×15 mm total = 65 mm printable body + 35 mm fold-only tail with zero ink)
 - [ ] Settle calibration offsets (horizontal/vertical mm) if needed
 - [ ] Then: PySide6 desktop shell + PyInstaller `.exe` packaging
 
@@ -231,7 +233,7 @@ backend and checks `/`, `/api/health`, `/api/printers`, `/api/settings`
 
 ```powershell
 cd server
-python -m PyInstaller --noconfirm --clean --name ManishTagPrinter --windowed --onedir --add-data "..\client\dist;client\dist" --add-data "alembic.ini;." --add-data "alembic;alembic" --add-binary "C:\Windows\System32\mfc140u.dll;." --hidden-import sqlalchemy.dialects.sqlite.pysqlite --hidden-import sqlalchemy.dialects.postgresql.psycopg2 desktop.py
+python -m PyInstaller --noconfirm --clean --name ManishTagPrinter --windowed --onedir --add-data "..\client\dist;client\dist" --add-data "alembic.ini;." --add-data "alembic;alembic" --add-data "C:\Users\nitin\AppData\Local\Programs\Python\Python313\Lib\site-packages\reportlab\fonts;reportlab/fonts" --add-binary "C:\Windows\System32\mfc140u.dll;." --hidden-import sqlalchemy.dialects.sqlite.pysqlite --hidden-import sqlalchemy.dialects.postgresql.psycopg2 desktop.py
 ```
 
 **Dual-database rule (one codebase, two targets):**

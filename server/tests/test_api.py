@@ -111,3 +111,54 @@ def test_tag_render(client):
     assert r.status_code == 200
     assert "18kt HUID" in r.json()["tag_svg"]
     assert "Less Wt." in r.json()["tag_svg"]
+
+
+def test_tag_render_warnings_and_hidden_less(client):
+    r = client.post("/api/tag/render", json={"purity_huid": "18kt HUID",
+                                             "product_name": "An extremely long product name for a tiny tag indeed",
+                                             "gross_weight": "2.146",
+                                             "net_weight": "2.146",
+                                             "less_weight": "",
+                                             "tag_width_mm": 40,
+                                             "tag_height_mm": 8})
+    assert r.status_code == 200
+    body = r.json()
+    assert "Less Wt." not in body["tag_svg"]
+    assert any(w["field"] == "Product name" for w in body["warnings"])
+
+
+def test_blank_weights_print_and_reprint(client, monkeypatch):
+    import app.api.routes_history as rh
+    import app.api.routes_print as rp
+    from app.printing.printer_adapter import PrintJobResult
+
+    class FakeAdapter:
+        def discover_printers(self):
+            return []
+
+        def get_status(self, name):
+            from app.printing.printer_adapter import PrinterInfo
+            return PrinterInfo(name=name, status="ready")
+
+        def print_svg(self, printer_name, svg, copies=1):
+            assert "Gross Wt." not in svg and "Net Wt." not in svg
+            return PrintJobResult(ok=True, message="ok")
+
+        def print_test(self, printer_name):
+            return PrintJobResult(ok=True, message="ok")
+
+    monkeypatch.setattr(rp, "get_adapter", lambda: FakeAdapter())
+    monkeypatch.setattr(rh, "get_adapter", lambda: FakeAdapter())
+    client.put("/api/settings/printer", json={"selected": "Fake LP 46"})
+    r = client.post("/api/print", json={"purity_huid": "", "product_name": "Ring",
+                                        "gross_weight": "", "less_weight": "",
+                                        "copies": 1})
+    assert r.status_code == 200, r.text
+    assert r.json()["ok"] is True
+    hid = r.json()["history_id"]
+    d = client.get(f"/api/history/{hid}").json()
+    assert d["gross_weight"] is None and d["net_weight"] is None
+    assert d["product_name"] == "Ring"
+    r2 = client.post(f"/api/history/{hid}/reprint")
+    assert r2.status_code == 200
+    assert client.get("/api/history").json()["total"] == 2

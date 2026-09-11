@@ -36,6 +36,43 @@ def test_raster_empty_raises():
         assert "empty" in str(exc).lower()
 
 
+def test_raster_no_ink_on_tail():
+    """The 35mm tail is fold-only: its pixels must stay paper-white."""
+    from app.tag.units import mm_to_dots
+
+    svg = build_tag_svg("18Kt HUID", "Ring", "2.146", "2.146",
+                        width_mm=100, height_mm=15, tail_mm=35,
+                        shop_name="Manish Ornaments", has_logo=False)
+    png = svg_to_png_bytes(svg, 100, 15)
+    img = Image.open(io.BytesIO(png)).convert("L")
+    assert img.size == (mm_to_dots(100), mm_to_dots(15))
+    body_px = mm_to_dots(65)
+    # +4px margin: the body border itself sits on the boundary (its ink may
+    # antialias ~3px over). Correct — but no content may print beyond it.
+    tail_px = [px for x in range(body_px + 4, img.size[0])
+               for px in [img.getpixel((x, y)) for y in range(img.size[1])]]
+    assert min(tail_px) > 250, "tail zone must be blank paper"
+    body_px_vals = [img.getpixel((x, y)) for x in range(body_px)
+                    for y in range(img.size[1])]
+    assert sum(1 for px in body_px_vals if px < 128) > 100
+
+
+def test_raster_uses_only_standard_fonts():
+    """Frozen builds have no system-font discovery — raster input must only
+    name reportlab standard fonts (regression test for the frozen
+    'NoneType has no attribute encode' crash)."""
+    import re
+
+    from app.printing.raster import _normalize_fonts
+
+    svg = build_tag_svg("18Kt HUID", "Ring", "2.146", "2.146",
+                        width_mm=100, height_mm=15, tail_mm=35,
+                        shop_name="Manish Ornaments", has_logo=True,
+                        logo_path="nonexistent.png")
+    fams = set(re.findall(r'font-family="([^"]+)"', _normalize_fonts(svg)))
+    assert fams <= {"Helvetica", "Times-Roman"}, fams
+
+
 def test_adapter_unknown_printer_returns_failure_not_raise():
     res = LP46NeoAdapter().print_svg("No Such Printer XYZ", _tag(), copies=1)
     assert res.ok is False

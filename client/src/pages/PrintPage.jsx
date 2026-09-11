@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Eye, Printer, RotateCcw, Settings as SettingsIcon, Tag, X } from "lucide-react";
+import { Eye, Printer, Settings as SettingsIcon, Tag } from "lucide-react";
 import TagPreview from "../components/TagPreview.jsx";
 import {
   Card,
@@ -14,7 +14,7 @@ import {
   Stepper,
   TextInput,
 } from "../components/ui.jsx";
-import { buildTagSvg, computeLess, computeNet } from "../lib/tagSvg.js";
+import { buildTagSvg, computeLess, computeNet, tagWarnings } from "../lib/tagSvg.js";
 import { api } from "../services/api.js";
 
 const PURITY_OPTIONS = [
@@ -31,15 +31,16 @@ const PURITY_OPTIONS = [
 ].map((p) => ({ value: p, label: p }));
 
 const TAG_SIZE_PRESETS = [
-  { label: "Custom (manual entry below)", value: "custom", w: 0 },
-  { label: "55 × 13 mm (fold tag)", value: "55x13", w: 55 },
-  { label: "100 × 12 mm (fits 104mm printers)", value: "100x12", w: 100 },
-  { label: "110 × 12 mm (fold tag)", value: "110x12", w: 110 },
-  { label: "25 × 15 mm", value: "25x15", w: 25 },
-  { label: "30 × 20 mm", value: "30x20", w: 30 },
-  { label: "40 × 25 mm", value: "40x25", w: 40 },
-  { label: "50 × 25 mm", value: "50x25", w: 50 },
-  { label: "110 × 15 mm", value: "110x15", w: 110 },
+  { label: "Custom (manual entry below)", value: "custom", w: 0, h: 0, tail: 0 },
+  { label: "100 × 15 mm (65 body + 35 tail)", value: "100x15", w: 100, h: 15, tail: 35 },
+  { label: "55 × 13 mm (fold tag)", value: "55x13", w: 55, h: 13, tail: 0 },
+  { label: "100 × 12 mm (fits 104mm printers)", value: "100x12", w: 100, h: 12, tail: 0 },
+  { label: "110 × 12 mm (fold tag)", value: "110x12", w: 110, h: 12, tail: 0 },
+  { label: "25 × 15 mm", value: "25x15", w: 25, h: 15, tail: 0 },
+  { label: "30 × 20 mm", value: "30x20", w: 30, h: 20, tail: 0 },
+  { label: "40 × 25 mm", value: "40x25", w: 40, h: 25, tail: 0 },
+  { label: "50 × 25 mm", value: "50x25", w: 50, h: 25, tail: 0 },
+  { label: "110 × 15 mm", value: "110x15", w: 110, h: 15, tail: 0 },
 ];
 
 const EMPTY = { purity_huid: "", product_name: "", gross_weight: "", less_weight: "", copies: "1" };
@@ -70,17 +71,25 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
   const hasLogo = Boolean(settings?.shop?.logo_path);
   const printerName = settings?.printer?.selected || "";
   // Manual tag dimensions: typed locally for instant preview, saved on blur/Enter.
+  // Tail = fold-only strip on the right (zero ink there, never prints).
   const [dimW, setDimW] = useState("");
   const [dimH, setDimH] = useState("");
+  const [dimT, setDimT] = useState("");
   const [dimErr, setDimErr] = useState("");
-  useEffect(() => {
+  const [dimsSaved, setDimsSaved] = useState(false);
+  function flashDimsSaved() {
+    setDimsSaved(true);
+    setTimeout(() => setDimsSaved(false), 2000);
+  }  useEffect(() => {
     if (settings?.tag) {
       setDimW(settings.tag.width_mm ?? "");
       setDimH(settings.tag.height_mm ?? "");
+      setDimT(settings.tag.tail_width_mm ?? "");
     }
-  }, [settings?.tag?.width_mm, settings?.tag?.height_mm]);
-  const tagW = Number(dimW) > 0 ? Number(dimW) : Number(settings?.tag?.width_mm) || 110;
+  }, [settings?.tag?.width_mm, settings?.tag?.height_mm, settings?.tag?.tail_width_mm]);
+  const tagW = Number(dimW) > 0 ? Number(dimW) : Number(settings?.tag?.width_mm) || 100;
   const tagH = Number(dimH) > 0 ? Number(dimH) : Number(settings?.tag?.height_mm) || 15;
+  const tagT = dimT === "" ? Number(settings?.tag?.tail_width_mm ?? 35) || 0 : Math.max(0, Number(dimT) || 0);
   const tagPresetValue = useMemo(() => {
     const hit = TAG_SIZE_PRESETS.find((t) => t.value === `${tagW}x${tagH}`);
     return hit ? hit.value : "custom";
@@ -163,6 +172,10 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
     () => computeNet(form.gross_weight, form.less_weight),
     [form.gross_weight, form.less_weight]
   );
+  // Blank Less input hides the Less row from the label entirely.
+  const showLess = String(form.less_weight ?? "").trim() !== "";
+  const showGross = String(form.gross_weight ?? "").trim() !== "";
+  const showNet = String(netWeight ?? "").trim() !== "";
   const tagSvg = useMemo(
     () =>
       buildTagSvg({
@@ -178,9 +191,45 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
         cal_x_mm: settings?.calibration?.offset_x_mm,
         cal_y_mm: settings?.calibration?.offset_y_mm,
         cal_scale: settings?.calibration?.scale,
+        show_less: showLess,
+        tail_mm: tagT,
+        show_gross: showGross,
+        show_net: showNet,
       }),
-    [form.purity_huid, form.product_name, form.gross_weight, netWeight, shopName, tagW, tagH, hasLogo, logoImageData, settings]
+    [form.purity_huid, form.product_name, form.gross_weight, netWeight, shopName, tagW, tagH, tagT, hasLogo, logoImageData, settings, showLess, showGross, showNet]
   );
+  // Live overflow warnings — same maths as the server, updated per keystroke.
+  const liveWarnings = useMemo(
+    () =>
+      tagWarnings(tagW, tagH, {
+        purity: form.purity_huid,
+        product: form.product_name,
+        gross: form.gross_weight ? `${form.gross_weight} g` : "",
+        less: showLess && form.less_weight ? `${form.less_weight} g` : "",
+        net: netWeight ? `${netWeight} g` : "",
+        shop_l1: (shopName.trim().split(/\s+/)[0] || "").toUpperCase(),
+        shop_l2: shopName.trim().split(/\s+/).slice(1).join(" ").toUpperCase(),
+        initial: (shopName.trim()[0] || "").toUpperCase(),
+      }, showLess, tagT, showGross, showNet),
+    [form, netWeight, shopName, tagW, tagH, tagT, showLess, showGross, showNet]
+  );
+  // Enter moves to the next field (skips dropdowns/buttons).
+  function handleEnterNext(e) {
+    if (e.key !== "Enter") return;
+    const t = e.target;
+    if (!t || t.tagName !== "INPUT" || t.type === "button" || t.type === "submit") return;
+    e.preventDefault();
+    const card = t.closest("[data-enter-zone]");
+    const scope = card || document;
+    const inputs = Array.from(scope.querySelectorAll('input:not([disabled]):not([type="hidden"])'));
+    const i = inputs.indexOf(t);
+    if (i >= 0 && i < inputs.length - 1) {
+      inputs[i + 1].focus();
+      inputs[i + 1].select?.();
+    } else if (e.target.form?.requestSubmit) {
+      e.target.form.requestSubmit();
+    }
+  }
   const lessWeight = useMemo(
     () => computeLess(form.gross_weight, netWeight),
     [form.gross_weight, netWeight]
@@ -208,7 +257,7 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
         refreshHistorySignal?.();
       } else if (res.errors) {
         setErrors(res.errors);
-        setNotice({ kind: "error", text: res.message || "Please fix the highlighted fields." });
+        setNotice({ kind: "error", text: res.errors.__form || "Please fix the highlighted fields." });
       } else {
         setNotice({ kind: "error", text: res.message || "Print failed. Check printer and try again." });
       }
@@ -227,6 +276,7 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
         product_name: form.product_name,
         gross_weight: form.gross_weight || null,
         net_weight: netWeight || null,
+        less_weight: form.less_weight || "",
       });
       setServerPreview(r);
       setNotice({ kind: "success", text: "Server preview loaded — exactly what will print." });
@@ -247,18 +297,22 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
 
   async function onPresetChange(value) {
     if (value === "custom") return;
-    const [w, h] = value.split("x");
-    await applyDims(w, h);
+    const hit = TAG_SIZE_PRESETS.find((t) => t.value === value);
+    if (!hit) return;
+    await applyDims(hit.w, hit.h, hit.tail);
   }
 
-  async function applyDims(w, h) {
+  async function applyDims(w, h, tail) {
+    const t = tail === undefined ? tagT : tail;
     setDimW(String(w));
     setDimH(String(h));
+    setDimT(String(t));
     setDimErr("");
     try {
-      await api.settingsPut("tag", { width_mm: String(w), height_mm: String(h) });
+      await api.settingsPut("tag", { width_mm: String(w), height_mm: String(h), tail_width_mm: String(t) });
       onSettingsSaved?.();
       setServerPreview(null);
+      flashDimsSaved();
     } catch {
       setDimErr("Could not save tag size.");
     }
@@ -267,26 +321,24 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
   async function saveDims() {
     const w = parseFloat(dimW);
     const h = parseFloat(dimH);
+    const t = dimT === "" ? tagT : parseFloat(dimT);
     if (!(w > 0 && w <= 500 && h > 0 && h <= 500)) {
       setDimErr("Width and height must be numbers between 0 and 500 mm.");
       return;
     }
+    if (!(t >= 0 && t < w)) {
+      setDimErr("Tail must be 0 or more, and less than the total width.");
+      return;
+    }
     setDimErr("");
     try {
-      await api.settingsPut("tag", { width_mm: String(w), height_mm: String(h) });
+      await api.settingsPut("tag", { width_mm: String(w), height_mm: String(h), tail_width_mm: String(t) });
       onSettingsSaved?.();
       setServerPreview(null);
+      flashDimsSaved();
     } catch {
       setDimErr("Could not save tag size.");
     }
-  }
-
-  function onClear() {
-    setForm(EMPTY);
-    setPurityMode("preset");
-    setErrors({});
-    setNotice(null);
-    setServerPreview(null);
   }
 
   const shownTag = serverPreview?.tag_svg || tagSvg;
@@ -299,7 +351,7 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
         <div className="flex flex-col gap-4">
           <Card>
             <CardTitle icon={Tag}>Tag Details</CardTitle>
-            <div className="flex flex-col gap-4 px-5 py-4">
+            <div className="flex flex-col gap-4 px-5 py-4" data-enter-zone onKeyDown={handleEnterNext}>
               <Row label="Purity" error={errors.purity_huid}>
                 {purityMode === "preset" ? (
                   <PremiumSelect
@@ -338,6 +390,9 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
                   {netWeight ? `${netWeight} g` : <span className="font-normal text-slate-400">—</span>}
                 </div>
               </Row>
+              <div className="-mt-2 text-xs text-slate-400">
+                Tip: only filled fields print — leave any field blank to hide it. Press Enter to jump to the next field.
+              </div>
             </div>
           </Card>
 
@@ -399,7 +454,31 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
                     />
                   </div>
                 </div>
+                <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-[150px_minmax(0,1fr)] sm:items-center sm:gap-3">
+                  <span className="text-sm text-slate-600">Tail (mm, fold only)</span>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <TextInput
+                      value={dimT}
+                      onChange={(e) => setDimT(e.target.value)}
+                      onBlur={saveDims}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.target.blur();
+                      }}
+                      placeholder="e.g. 35"
+                      inputMode="decimal"
+                      aria-label="Tail width in mm (no print here)"
+                    />
+                    <span className="whitespace-nowrap text-xs text-slate-400">
+                      Body prints {Math.max(0, Math.round((tagW - tagT) * 10) / 10)} mm
+                    </span>
+                  </div>
+                </div>
                 {dimErr && <div className="mt-1 text-[13px] text-red-600 sm:pl-[162px]">{dimErr}</div>}
+                {dimsSaved && !dimErr && (
+                  <div className="mt-1 text-xs font-semibold text-green-600 sm:pl-[162px]">
+                    Saved ✓ — Settings page will show the same values.
+                  </div>
+                )}
                 {maxW && !tooWide && (
                   <div className="mt-1 text-xs text-slate-400 sm:pl-[162px]">
                     {printerName || "Printer"} prints max {maxW} mm wide — fits.
@@ -442,29 +521,10 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
               widthMm={tagW}
               heightMm={tagH}
               serverBacked={Boolean(serverPreview)}
-              data={{ ...form, net_weight: netWeight, shopName, lessWeight }}
+              warnings={serverPreview?.warnings || liveWarnings}
             />
           </div>
         </Card>
-      </div>
-
-      {/* Footer bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200/60 bg-gradient-to-r from-white via-blue-50/30 to-white px-5 py-3.5 shadow-[0_2px_12px_rgba(79,70,229,0.06)]">
-        <div className="text-[13px] font-medium tracking-wide text-slate-600">
-          <span className="font-bold text-slate-900">{shopName || "MK JEWELLERS"}</span>
-          <span className="mx-2 text-slate-300">•</span>
-          EXCELLENCE IN EVERY TAG
-        </div>
-        <div className="flex gap-2">
-          <OutlineButton small onClick={onClear} className="px-5">
-            <RotateCcw size={14} />
-            Clear
-          </OutlineButton>
-          <OutlineButton small onClick={() => window.close()} className="px-5">
-            <X size={14} />
-            Exit
-          </OutlineButton>
-        </div>
       </div>
     </div>
   );

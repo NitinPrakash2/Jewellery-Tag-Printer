@@ -2,12 +2,21 @@ from app.domain import validators
 from app.services import print_service
 
 
-def test_required_fields():
-    cleaned, errors = print_service.validate_print_data({})
-    assert "purity_huid" in errors
-    assert "product_name" in errors
-    assert "gross_weight" in errors
-    assert "net_weight" in errors
+def test_blank_form_refused():
+    # Only a fully blank form is refused — anything filled prints.
+    _, errors = print_service.validate_print_data({})
+    assert errors.get("__form")
+
+
+def test_single_field_prints():
+    cleaned, errors = print_service.validate_print_data({
+        "purity_huid": "", "product_name": "Ring",
+        "gross_weight": "", "less_weight": "", "copies": 1,
+    })
+    assert errors == {}
+    assert cleaned["show_gross"] is False
+    assert cleaned["show_net"] is False
+    assert cleaned["net_weight"] is None
 
 
 def test_non_numeric_weight():

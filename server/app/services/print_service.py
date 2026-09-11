@@ -12,10 +12,16 @@ from app.domain import validators
 from app.logging_setup import log
 from app.printing.calibration import Calibration, apply_calibration
 from app.services import settings_service
-from app.tag.renderer import DEFAULT_TAG_HEIGHT_MM, DEFAULT_TAG_WIDTH_MM, TEMPLATE_VERSION, build_tag_svg
+from app.tag.renderer import DEFAULT_TAG_HEIGHT_MM, DEFAULT_TAG_WIDTH_MM, DEFAULT_TAIL_MM, TEMPLATE_VERSION, build_tag_svg
+
+
+def _is_blank(value) -> bool:
+    return value is None or str(value).strip() == ""
 
 
 def validate_print_data(data: dict) -> tuple[dict, dict[str, str]]:
+    # Rule: only filled fields print. Blank fields are hidden from the
+    # label automatically — no error. Only a fully blank form is refused.
     errors: dict[str, str] = {}
     purity = str(data.get("purity_huid", ""))
     product = str(data.get("product_name", ""))
@@ -27,21 +33,25 @@ def validate_print_data(data: dict) -> tuple[dict, dict[str, str]]:
     if e:
         errors["product_name"] = e
 
-    gross, e = validators.parse_weight(data.get("gross_weight"), "Gross")
-    if e:
-        errors["gross_weight"] = e
+    gross = None
+    if not _is_blank(data.get("gross_weight")):
+        gross, e = validators.parse_weight(data.get("gross_weight"), "Gross")
+        if e:
+            errors["gross_weight"] = e
 
     # Net weight is automatic: net = gross - less. The form sends less_weight;
     # a direct net_weight is still accepted for backwards compatibility.
     less_raw = data.get("less_weight", None)
-    less_is_given = less_raw is not None and str(less_raw).strip() != ""
+    less_is_given = not _is_blank(less_raw)
     net = None
     less = None
-    if less_is_given:
+    if less_is_given and gross is None and "gross_weight" not in errors:
+        errors["less_weight"] = "Less needs Gross weight — fill Gross first or clear Less."
+    elif less_is_given:
         less, e = validators.parse_weight(less_raw, "Less")
         if e:
             errors["less_weight"] = e
-        elif "gross_weight" not in errors:
+        elif gross is not None:
             if less < 0:
                 errors["less_weight"] = "Less weight cannot be negative."
             elif less > gross:
@@ -50,18 +60,18 @@ def validate_print_data(data: dict) -> tuple[dict, dict[str, str]]:
                 net = gross - less
     else:
         net_raw = data.get("net_weight", None)
-        net_is_given = net_raw is not None and str(net_raw).strip() != ""
-        if not net_is_given and "gross_weight" not in errors:
-            # Nothing deducted: less defaults to 0, net equals gross.
-            from decimal import Decimal as _D
+        if _is_blank(net_raw):
+            if gross is not None:
+                # Nothing deducted: net equals gross, Less row hidden.
+                from decimal import Decimal as _D
 
-            less = _D("0")
-            net = gross
+                less = _D("0")
+                net = gross
         else:
             net, e = validators.parse_weight(net_raw, "Net")
             if e:
                 errors["net_weight"] = e
-            elif "gross_weight" not in errors:
+            elif gross is not None:
                 e = validators.validate_weights_relation(gross, net)
                 if e:
                     errors["net_weight"] = e
@@ -70,12 +80,21 @@ def validate_print_data(data: dict) -> tuple[dict, dict[str, str]]:
     if e:
         errors["copies"] = e
 
+    if (not purity.strip() and not product.strip() and gross is None
+            and not less_is_given and not errors):
+        errors["__form"] = "Fill at least one field — purity, item, or a weight — to print."
+
     cleaned = {
         "purity_huid": purity.strip(),
         "product_name": product.strip(),
-        "gross_weight": gross if "gross_weight" not in errors else data.get("gross_weight"),
-        "less_weight": less if "less_weight" not in errors else (less_raw or ""),
-        "net_weight": net if net is not None else data.get("net_weight"),
+        "gross_weight": gross,
+        "less_weight": less,
+        # Visibility = filled. Blank Less input hides the Less row entirely;
+        # an absent key (legacy callers) keeps the old behaviour.
+        "show_gross": gross is not None,
+        "show_less": less_is_given,
+        "show_net": net is not None,
+        "net_weight": net,
         "copies": copies if "copies" not in errors else data.get("copies"),
         "printer_name": str(data.get("printer_name", "") or "").strip(),
     }
@@ -91,13 +110,14 @@ def _settings_snapshot(db) -> dict:
 
 
 def render_tag(db, cleaned: dict) -> str:
-    """Render the single fold-over tag (back + fold + front + tail)."""
+    """Render the single fold-over tag (printable body + blank fold tail)."""
     s = _settings_snapshot(db)
     try:
         w = float(s["tag"].get("width_mm", DEFAULT_TAG_WIDTH_MM))
         h = float(s["tag"].get("height_mm", DEFAULT_TAG_HEIGHT_MM))
+        tail = float(s["tag"].get("tail_width_mm", DEFAULT_TAIL_MM))
     except ValueError:
-        w, h = DEFAULT_TAG_WIDTH_MM, DEFAULT_TAG_HEIGHT_MM
+        w, h, tail = DEFAULT_TAG_WIDTH_MM, DEFAULT_TAG_HEIGHT_MM, DEFAULT_TAIL_MM
     shop_name = s["shop"].get("name", "")
     logo_path = s["shop"].get("logo_path", "")
     has_logo = bool(logo_path)
@@ -105,7 +125,10 @@ def render_tag(db, cleaned: dict) -> str:
         cleaned["purity_huid"], cleaned["product_name"],
         cleaned["gross_weight"], cleaned["net_weight"],
         width_mm=w, height_mm=h, shop_name=shop_name, has_logo=has_logo,
-        logo_path=logo_path,
+        logo_path=logo_path, show_less=bool(cleaned.get("show_less", True)),
+        tail_mm=tail,
+        show_gross=cleaned.get("gross_weight") is not None,
+        show_net=cleaned.get("net_weight") is not None,
     )
     try:
         cal = Calibration(
@@ -116,6 +139,15 @@ def render_tag(db, cleaned: dict) -> str:
     except ValueError:
         cal = Calibration()
     return apply_calibration(tag, cal)
+
+
+def _num_or_none(value):
+    if value is None:
+        return None
+    try:
+        return Decimal(str(value))
+    except Exception:
+        return None
 
 
 def execute_print(db, adapter, cleaned: dict) -> dict:
@@ -139,8 +171,8 @@ def execute_print(db, adapter, cleaned: dict) -> dict:
         record("PRINTER", "error", f"Print failed on '{printer_name}'. {res.message}")
         row = history_repo.create(
             db, purity_huid=cleaned["purity_huid"], product_name=cleaned["product_name"],
-            gross_weight=Decimal(str(cleaned["gross_weight"])),
-            net_weight=Decimal(str(cleaned["net_weight"])), copies=copies,
+            gross_weight=_num_or_none(cleaned.get("gross_weight")),
+            net_weight=_num_or_none(cleaned.get("net_weight")), copies=copies,
             printer_name=printer_name, template_version=TEMPLATE_VERSION,
             status="failed", error_message=res.message,
         )
@@ -149,8 +181,8 @@ def execute_print(db, adapter, cleaned: dict) -> dict:
 
     row = history_repo.create(
         db, purity_huid=cleaned["purity_huid"], product_name=cleaned["product_name"],
-        gross_weight=Decimal(str(cleaned["gross_weight"])),
-        net_weight=Decimal(str(cleaned["net_weight"])), copies=copies,
+        gross_weight=_num_or_none(cleaned.get("gross_weight")),
+        net_weight=_num_or_none(cleaned.get("net_weight")), copies=copies,
         printer_name=printer_name, template_version=TEMPLATE_VERSION, status="success",
     )
     log.info("print success id=%s printer=%s copies=%s", row.id, printer_name, copies)

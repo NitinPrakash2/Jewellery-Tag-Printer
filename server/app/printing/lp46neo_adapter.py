@@ -41,7 +41,7 @@ class LP46NeoAdapter(PrinterAdapter):
         out = [PrinterInfo(name=n, is_default=(n == default), status="ready") for n in names]
         # Known models appear as one-click setup targets even before install.
         placeholders = [
-            ("TVS LP 46 Neo", ("LP 46", "LP46")),
+            ("TVS LP 46 Neo", ("LP 46", "LP46", "TVSE", "BPLE")),
             ("DCode DC 423 Pro", ("DCODE", "DC 423", "DC423", "DC 421", "DC421")),
             ("4BARCODE 4B-2054TG", ("4BARCODE", "4B-2054", "4B2054", "2054TG")),
         ]

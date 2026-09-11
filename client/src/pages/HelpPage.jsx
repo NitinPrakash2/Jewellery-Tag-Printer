@@ -160,6 +160,7 @@ export default function HelpPage({ onGoSettings }) {
           <TroubleRow problem="Printer not connected" fix="Install the driver (Step 2), check USB cable and power, then press Refresh." />
           <TroubleRow problem="Out of paper" fix="The label roll is empty — load a new roll." />
           <TroubleRow problem="Cover open" fix="Close the printer cover fully and retry." />
+          <TroubleRow problem="Print too light / thin text" fix="Windows Settings → Printers → your printer → Printing preferences → raise Density/Darkness, then Test Print again." />
           <TroubleRow problem="Right edge cut off" fix="Tag is wider than the printer's maximum. Use the suggested fitting size." />
           <TroubleRow problem="Print slightly shifted" fix="Settings → Calibration: try 0.5–1 mm offsets + Test Print." />
           <TroubleRow problem="Red server dot" fix="The server window was closed — start it again, then refresh this page." />

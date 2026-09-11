@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api/printers", tags=["printers"])
 # (name patterns, max print width mm) — matched case-insensitively.
 PRINTER_LIMITS: list[tuple[tuple[str, ...], int]] = [
     (("dcode", "dc 423", "dc423", "dc 421", "dc421"), 104),
-    (("tvs", "lp 46", "lp46"), 108),
+    (("tvs", "tvse", "lp 46", "lp46", "bple"), 108),
 ]
 
 
@@ -64,7 +64,7 @@ def test_print(payload: dict, db: Session = Depends(get_db)):
 DRIVER_HELP = {
     "tvs_lp46neo": {
         "name": "TVS LP 46 Neo",
-        "match": ["tvs", "lp 46", "lp46"],
+        "match": ["tvs", "tvse", "lp 46", "lp46", "bple"],
         "download_url": "https://www.tvselectronics.in/product-support",
         "steps": [
             "Connect the printer via USB, switch it on, and keep internet on — Windows usually installs its driver automatically (plug-and-play).",
