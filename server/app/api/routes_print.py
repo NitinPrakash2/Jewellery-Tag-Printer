@@ -64,12 +64,14 @@ def render_tag(req: TagRenderRequest, db: Session = Depends(get_db)):
     net_in = req.net_weight if req.net_weight is not None else ""
     show_gross = str(gross_in).strip() != ""
     show_net = str(net_in).strip() != ""
+    show_lines = str(s["tag"].get("show_lines", "0")).strip().lower() in ("1", "true")
     tag = build_tag_svg(
         req.purity_huid or "", req.product_name or "",
         gross_in, net_in,
         width_mm=w, height_mm=h, shop_name=shop,
         has_logo=bool(logo_path), logo_path=logo_path, show_less=show_less,
         tail_mm=tail, show_gross=show_gross, show_net=show_net,
+        show_lines=show_lines,
     )
     from app.tag.layout import layout_warnings
     from app.tag.renderer import brand_parts

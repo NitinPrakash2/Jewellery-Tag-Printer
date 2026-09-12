@@ -72,11 +72,11 @@ def tag_layout(width_mm: float, height_mm: float, texts: dict,
     ix = fold_x * 0.76
     iw = fold_x * 0.42               # full width of item zone
     purity = texts.get("purity", "")
-    item = f"ITEM - {texts.get('product', '')}"
+    item = str(texts.get("product", ""))
     # Item + purity share ONE font so both lines always match in size.
-    # It fits the longer of the two inside the item zone.
+    # It fits the longer of the two inside the item zone (both render bold).
     back_font = min(
-        fit_font(item, iw, h * 0.17),
+        fit_font(item, iw, h * 0.17, bold=True),
         fit_font(purity, iw, h * 0.17, bold=True),
     )
 
@@ -162,7 +162,7 @@ def layout_warnings(width_mm: float, height_mm: float, texts: dict,
             })
 
     _add("Purity / HUID", _overflow_mm(texts.get("purity", ""), lay["iw"], "sans", True), "item zone")
-    _add("Product name", _overflow_mm(f"ITEM - {texts.get('product', '')}", lay["iw"], "sans", False), "item zone")
+    _add("Product name", _overflow_mm(str(texts.get("product", "")), lay["iw"], "sans", True), "item zone")
     _add("Shop headline", _overflow_mm(texts.get("shop_l1", ""), lay["logo_hw"] * 2, "serif", False, L1_SPACING), "logo zone")
     _add("Shop subline", _overflow_mm(texts.get("shop_l2", ""), lay["logo_hw"] * 2, "sans", False, L2_SPACING), "logo zone")
     _add("Shop tagline", _overflow_mm(TAGLINE_TEXT, lay["logo_hw"] * 2, "sans", False, TAGLINE_SPACING), "logo zone")

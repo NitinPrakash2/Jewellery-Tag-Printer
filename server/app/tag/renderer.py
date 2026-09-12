@@ -78,6 +78,7 @@ def build_tag_svg(
     tail_mm: float = DEFAULT_TAIL_MM,
     show_gross: bool = True,
     show_net: bool = True,
+    show_lines: bool = False,
 ) -> str:
     w = float(width_mm or DEFAULT_TAG_WIDTH_MM)
     h = float(height_mm or DEFAULT_TAG_HEIGHT_MM)
@@ -93,17 +94,29 @@ def build_tag_svg(
     }, show_less=show_less, tail_mm=tail_mm,
        show_gross=show_gross, show_net=show_net)
     bw, fx = lay["body_w"], lay["fold_x"]
+    # Lines: solid black = printed. Dashed gray + preview-only = shown in
+    # preview as an area guide, stripped before raster so paper stays clean.
+    # Positions are identical either way, so alignment never changes.
+    if show_lines:
+        border = (f'<rect x="{_f(lay["body_x"])}" y="{_f(h * 0.04)}" width="{_f(bw)}" '
+                  f'height="{_f(h * 0.92)}" rx="{_f(h * 0.12)}" fill="#fff" '
+                  f'stroke="black" stroke-width="0.4"/>')
+        fold = (f'<line x1="{_f(fx)}" y1="{_f(h * 0.06)}" x2="{_f(fx)}" '
+                f'y2="{_f(h * 0.94)}" stroke="black" stroke-width="0.35" stroke-dasharray="1.2 0.8"/>')
+    else:
+        border = (f'<rect x="{_f(lay["body_x"])}" y="{_f(h * 0.04)}" width="{_f(bw)}" '
+                  f'height="{_f(h * 0.92)}" rx="{_f(h * 0.12)}" fill="none" '
+                  f'stroke="#94a3b8" stroke-width="0.25" stroke-dasharray="1.5 1" '
+                  f'data-preview-only="true"/>')
+        fold = (f'<line x1="{_f(fx)}" y1="{_f(h * 0.06)}" x2="{_f(fx)}" '
+                f'y2="{_f(h * 0.94)}" stroke="#94a3b8" stroke-width="0.25" '
+                f'stroke-dasharray="1.5 1" data-preview-only="true"/>')
 
     parts: list[str] = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}mm" height="{h}mm" '
         f'viewBox="0 0 {w} {h}" data-side="fold-tag" data-template="{TEMPLATE_VERSION}">',
-        # printable body only — the tail gets ZERO ink (fold only)
-        f'<rect x="{_f(lay["body_x"])}" y="{_f(h * 0.04)}" width="{_f(bw)}" '
-        f'height="{_f(h * 0.92)}" rx="{_f(h * 0.12)}" fill="#fff" '
-        f'stroke="black" stroke-width="0.4"/>',
-        # fold line (dashed)
-        f'<line x1="{_f(fx)}" y1="{_f(h * 0.06)}" x2="{_f(fx)}" '
-        f'y2="{_f(h * 0.94)}" stroke="black" stroke-width="0.35" stroke-dasharray="1.2 0.8"/>',
+        border,
+        fold,
     ]
     if lay["tail"] > 0:
         # Tail outline is PREVIEW ONLY (stripped before raster/print).
@@ -154,24 +167,41 @@ def build_tag_svg(
                 f'letter-spacing="0.3">TRUST IN EVERY CARAT</text>'
             )
     # vertical divider between logo and item zones
-    parts.append(
-        f'<line x1="{_f(fx * 0.52)}" y1="{_f(h * 0.12)}" '
-        f'x2="{_f(fx * 0.52)}" y2="{_f(h * 0.88)}" '
-        f'stroke="black" stroke-width="0.35"/>'
-    )
-    # item zone — hidden entirely when the product is blank
+    if show_lines:
+        parts.append(
+            f'<line x1="{_f(fx * 0.52)}" y1="{_f(h * 0.12)}" '
+            f'x2="{_f(fx * 0.52)}" y2="{_f(h * 0.88)}" '
+            f'stroke="black" stroke-width="0.35"/>'
+        )
+    else:
+        parts.append(
+            f'<line x1="{_f(fx * 0.52)}" y1="{_f(h * 0.12)}" '
+            f'x2="{_f(fx * 0.52)}" y2="{_f(h * 0.88)}" '
+            f'stroke="#94a3b8" stroke-width="0.25" stroke-dasharray="1.5 1" '
+            f'data-preview-only="true"/>'
+        )
+    # item zone — hidden entirely when the product is blank.
+    # Final design: product name only, no "ITEM -" prefix.
     if str(product_name or "").strip():
         parts.append(
             f'<text x="{_f(lay["ix"])}" y="{_f(h * 0.34)}" text-anchor="middle" '
             f'font-family="Arial,sans-serif" font-size="{_f(lay["item_font"])}" '
             f'font-weight="bold">'
-            f"ITEM - {_esc(product_name)}</text>"
+            f"{_esc(product_name)}</text>"
         )
-        parts.append(
-            f'<line x1="{_f(lay["ix"] - lay["iw"] / 2)}" y1="{_f(h * 0.50)}" '
-            f'x2="{_f(lay["ix"] + lay["iw"] / 2)}" y2="{_f(h * 0.50)}" '
-            f'stroke="{GOLD}" stroke-width="0.4"/>'
-        )
+        if show_lines:
+            parts.append(
+                f'<line x1="{_f(lay["ix"] - lay["iw"] / 2)}" y1="{_f(h * 0.50)}" '
+                f'x2="{_f(lay["ix"] + lay["iw"] / 2)}" y2="{_f(h * 0.50)}" '
+                f'stroke="{GOLD}" stroke-width="0.4"/>'
+            )
+        else:
+            parts.append(
+                f'<line x1="{_f(lay["ix"] - lay["iw"] / 2)}" y1="{_f(h * 0.50)}" '
+                f'x2="{_f(lay["ix"] + lay["iw"] / 2)}" y2="{_f(h * 0.50)}" '
+                f'stroke="#94a3b8" stroke-width="0.25" stroke-dasharray="1.5 1" '
+                f'data-preview-only="true"/>'
+            )
     if str(purity_huid or "").strip():
         parts.append(
             f'<text x="{_f(lay["ix"])}" y="{_f(h * 0.72)}" text-anchor="middle" '

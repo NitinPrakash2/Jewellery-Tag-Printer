@@ -6,7 +6,7 @@ from app.database.repositories import settings_repo
 DEFAULTS: dict[str, dict[str, str]] = {
     "shop": {"name": "", "logo_path": ""},
     "printer": {"selected": "", "status_note": ""},
-    "tag": {"width_mm": "100.0", "height_mm": "15.0", "tail_width_mm": "35.0", "orientation": "landscape"},
+    "tag": {"width_mm": "100.0", "height_mm": "15.0", "tail_width_mm": "35.0", "orientation": "landscape", "show_lines": "0"},
     "calibration": {"offset_x_mm": "0.0", "offset_y_mm": "0.0", "scale": "1.0", "rotate_180": "0"},
     "app": {"theme": "light", "default_copies": "1"},
 }
@@ -62,6 +62,8 @@ def update_category(db, category: str, values: dict[str, str]) -> dict[str, str]
                 raise ValueError("Tail must be 0 or more, and less than the total width.")
         if "orientation" in clean and clean["orientation"] not in ("landscape", "portrait"):
             raise ValueError("Orientation must be landscape or portrait.")
+        if "show_lines" in clean and str(clean["show_lines"]).strip() not in ("0", "1", "true", "false"):
+            raise ValueError("Show lines must be on or off.")
     if category == "calibration":
         for k in ("offset_x_mm", "offset_y_mm"):
             if k in clean:

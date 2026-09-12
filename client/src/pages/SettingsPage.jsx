@@ -316,6 +316,26 @@ export default function SettingsPage({ settings, onSaved, onGoHelp }) {
             />
           </Field>
         </div>
+        <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-slate-200 bg-white px-3.5 py-3 shadow-sm transition hover:border-slate-400">
+          <input
+            type="checkbox"
+            checked={["1", "true"].includes(String(local?.tag?.show_lines ?? "0").toLowerCase())}
+            onChange={(e) => {
+              dirtyRef.current["tag"] = true;
+              setLocal((s) => ({
+                ...s,
+                tag: { ...(s.tag || {}), show_lines: e.target.checked ? "1" : "0" },
+              }));
+            }}
+            className="mt-0.5 h-4 w-4 accent-slate-900"
+          />
+          <span className="text-[13px] text-slate-700">
+            <span className="font-bold text-slate-900">Print border &amp; divider lines.</span>
+            <span className="block text-xs text-slate-500">
+              Off (recommended): no lines print — preview shows them dotted grey so you can see the content area. On: solid lines print on the label.
+            </span>
+          </span>
+        </label>
         <div className="flex flex-wrap items-center gap-2.5">
           <SaveBtn cat="tag" />
           <SectionNotice cat="tag" />

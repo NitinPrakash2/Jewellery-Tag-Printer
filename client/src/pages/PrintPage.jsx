@@ -196,6 +196,8 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
         tail_mm: tagT,
         show_gross: showGross,
         show_net: showNet,
+        show_lines: String(settings?.tag?.show_lines || "0").toLowerCase() === "1" ||
+          String(settings?.tag?.show_lines || "").toLowerCase() === "true",
       }),
     [form.purity_huid, form.product_name, form.gross_weight, netWeight, shopName, tagW, tagH, tagT, hasLogo, logoImageData, settings, showLess, showGross, showNet]
   );

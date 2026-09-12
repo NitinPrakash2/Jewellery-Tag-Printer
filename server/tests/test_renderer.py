@@ -14,13 +14,28 @@ def _tag(**kw):
 def test_tag_contains_fields():
     svg = _tag(has_logo=True)
     assert "18Kt HUID" in svg
-    assert "ITEM - Ring" in svg
+    assert "Ring" in svg
+    assert "ITEM -" not in svg  # final design: product name only
     assert "Gross Wt." in svg and "Less Wt." in svg and "Net Wt." in svg
     assert "2.146 g" in svg
     assert "0.000 g" in svg  # less = gross - net
     assert "MANISH" in svg
     assert "<svg" in svg
     assert 'data-template="v5"' in svg
+
+
+def test_lines_toggle():
+    # OFF (default): dashed grey guides, preview-only — positions identical.
+    off = build_tag_svg("18Kt HUID", "Ring", "2.146", "2.146",
+                        width_mm=100, height_mm=15, tail_mm=35, show_lines=False)
+    assert 'data-preview-only="true"' in off
+    assert 'stroke="black" stroke-width="0.4"' not in off
+    assert 'stroke="black" stroke-width="0.35"' not in off
+    # ON: solid black lines print, no guides except the tail outline.
+    on = build_tag_svg("18Kt HUID", "Ring", "2.146", "2.146",
+                       width_mm=100, height_mm=15, tail_mm=35, show_lines=True)
+    assert 'stroke="black" stroke-width="0.4"' in on
+    assert on.count('data-preview-only="true"') == 1  # tail outline only
 
 
 def test_body_only_tail_has_zero_ink():
@@ -36,7 +51,10 @@ def test_tail_zero_means_full_width_body():
     svg = build_tag_svg("18Kt HUID", "Ring", "1", "1", width_mm=50, height_mm=25, tail_mm=0)
     assert svg.count("<rect") == 1
     assert 'width="50"' in svg
-    assert "data-preview-only" not in svg
+    # lines ON + no tail = zero preview-only elements: everything prints.
+    solid = build_tag_svg("18Kt HUID", "Ring", "1", "1", width_mm=50, height_mm=25,
+                          tail_mm=0, show_lines=True)
+    assert "data-preview-only" not in solid
 
 
 def test_no_text_length_hacks():

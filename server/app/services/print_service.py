@@ -121,6 +121,7 @@ def render_tag(db, cleaned: dict) -> str:
     shop_name = s["shop"].get("name", "")
     logo_path = s["shop"].get("logo_path", "")
     has_logo = bool(logo_path)
+    show_lines = str(s["tag"].get("show_lines", "0")).strip().lower() in ("1", "true")
     tag = build_tag_svg(
         cleaned["purity_huid"], cleaned["product_name"],
         cleaned["gross_weight"], cleaned["net_weight"],
@@ -129,6 +130,7 @@ def render_tag(db, cleaned: dict) -> str:
         tail_mm=tail,
         show_gross=cleaned.get("gross_weight") is not None,
         show_net=cleaned.get("net_weight") is not None,
+        show_lines=show_lines,
     )
     try:
         from app.printing.calibration import parse_rotate_180

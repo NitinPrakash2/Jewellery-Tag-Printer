@@ -85,7 +85,7 @@ export function tagLayout(widthMm, heightMm, texts, showLess = true, tailMm = 0,
   // Item + purity share ONE font so both lines always match in size.
   const backFont =
     Math.round(Math.min(
-      fitFont(`ITEM - ${texts.product || ""}`, iw, h * 0.17),
+      fitFont(texts.product, iw, h * 0.17, "sans", true),
       fitFont(texts.purity, iw, h * 0.17, "sans", true)
     ) * 100) / 100;
 
@@ -141,7 +141,7 @@ export function tagWarnings(widthMm, heightMm, texts, showLess = true, tailMm = 
     }
   };
   add("Purity / HUID", overflowMm(texts.purity, lay.iw, "sans", true), "item zone");
-  add("Product name", overflowMm(`ITEM - ${texts.product || ""}`, lay.iw, "sans", false), "item zone");
+  add("Product name", overflowMm(texts.product, lay.iw, "sans", true), "item zone");
   add("Shop headline", overflowMm(texts.shop_l1, lay.logoHw * 2, "serif", false, L1_SPACING), "logo zone");
   add("Shop subline", overflowMm(texts.shop_l2, lay.logoHw * 2, "sans", false, L2_SPACING), "logo zone");
   add("Shop tagline", overflowMm(TAGLINE_TEXT, lay.logoHw * 2, "sans", false, TAGLINE_SPACING), "logo zone");
@@ -155,7 +155,7 @@ export function tagWarnings(widthMm, heightMm, texts, showLess = true, tailMm = 
   return out;
 }
 
-export function buildTagSvg({ purity_huid, product_name, gross_weight, net_weight, shop_name = "", width_mm = 100, height_mm = 15, has_logo = false, logo_image = null, cal_x_mm = 0, cal_y_mm = 0, cal_scale = 1, cal_rotate = false, show_less = true, tail_mm = 0, show_gross = true, show_net = true }) {
+export function buildTagSvg({ purity_huid, product_name, gross_weight, net_weight, shop_name = "", width_mm = 100, height_mm = 15, has_logo = false, logo_image = null, cal_x_mm = 0, cal_y_mm = 0, cal_scale = 1, cal_rotate = false, show_less = true, tail_mm = 0, show_gross = true, show_net = true, show_lines = false }) {
   const f = (n) => +n.toFixed(2);
   const { initial, line1, line2 } = brandParts(shop_name);
   const less = computeLess(gross_weight, net_weight);
@@ -166,9 +166,18 @@ export function buildTagSvg({ purity_huid, product_name, gross_weight, net_weigh
   }, show_less, tail_mm, show_gross, show_net);
   const { w, h, bodyW, foldX } = { w: lay.w, h: lay.h, bodyW: lay.bodyW, foldX: lay.foldX };
 
-  let s =
-    `<rect x="${f(lay.bodyX)}" y="${f(h * 0.04)}" width="${f(bodyW)}" height="${f(h * 0.92)}" rx="${f(h * 0.12)}" fill="#fff" stroke="black" stroke-width="0.4"/>` +
-    `<line x1="${f(foldX)}" y1="${f(h * 0.06)}" x2="${f(foldX)}" y2="${f(h * 0.94)}" stroke="black" stroke-width="0.35" stroke-dasharray="1.2 0.8"/>`;
+  // Lines: solid black = printed. Dashed gray = preview-only area guide
+  // (stripped before raster, paper stays clean). Same positions either way.
+  let s;
+  if (show_lines) {
+    s =
+      `<rect x="${f(lay.bodyX)}" y="${f(h * 0.04)}" width="${f(bodyW)}" height="${f(h * 0.92)}" rx="${f(h * 0.12)}" fill="#fff" stroke="black" stroke-width="0.4"/>` +
+      `<line x1="${f(foldX)}" y1="${f(h * 0.06)}" x2="${f(foldX)}" y2="${f(h * 0.94)}" stroke="black" stroke-width="0.35" stroke-dasharray="1.2 0.8"/>`;
+  } else {
+    s =
+      `<rect x="${f(lay.bodyX)}" y="${f(h * 0.04)}" width="${f(bodyW)}" height="${f(h * 0.92)}" rx="${f(h * 0.12)}" fill="none" stroke="#94a3b8" stroke-width="0.25" stroke-dasharray="1.5 1" data-preview-only="true"/>` +
+      `<line x1="${f(foldX)}" y1="${f(h * 0.06)}" x2="${f(foldX)}" y2="${f(h * 0.94)}" stroke="#94a3b8" stroke-width="0.25" stroke-dasharray="1.5 1" data-preview-only="true"/>`;
+  }
   if (lay.tail > 0) {
     // Tail outline is preview-only: fold here, never print here.
     s += `<rect x="${f(lay.tailX)}" y="${f(h * 0.3)}" width="${f(lay.tail)}" height="${f(h * 0.4)}" rx="${f(h * 0.18)}" fill="none" stroke="#94a3b8" stroke-width="0.25" stroke-dasharray="1.5 1" data-preview-only="true"/>`;
@@ -192,13 +201,18 @@ export function buildTagSvg({ purity_huid, product_name, gross_weight, net_weigh
       s += `<text x="${f(logoCx)}" y="${f(h * 0.87)}" text-anchor="middle" font-family="Arial,sans-serif" font-size="${f(lay.taglineFont)}" letter-spacing="0.3">TRUST IN EVERY CARAT</text>`;
     }
   }
-  s += `<line x1="${f(foldX * 0.52)}" y1="${f(h * 0.12)}" x2="${f(foldX * 0.52)}" y2="${f(h * 0.88)}" stroke="black" stroke-width="0.35"/>`;
+  const divLine = show_lines
+    ? `<line x1="${f(foldX * 0.52)}" y1="${f(h * 0.12)}" x2="${f(foldX * 0.52)}" y2="${f(h * 0.88)}" stroke="black" stroke-width="0.35"/>`
+    : `<line x1="${f(foldX * 0.52)}" y1="${f(h * 0.12)}" x2="${f(foldX * 0.52)}" y2="${f(h * 0.88)}" stroke="#94a3b8" stroke-width="0.25" stroke-dasharray="1.5 1" data-preview-only="true"/>`;
+  s += divLine;
 
   const hasProduct = String(product_name ?? "").trim() !== "";
   const hasPurity = String(purity_huid ?? "").trim() !== "";
   if (hasProduct) {
-    s += `<text x="${f(lay.ix)}" y="${f(h * 0.34)}" text-anchor="middle" font-family="Arial,sans-serif" font-size="${f(lay.itemFont)}" font-weight="bold">ITEM - ${esc(product_name)}</text>`;
-    s += `<line x1="${f(lay.ix - lay.iw / 2)}" y1="${f(h * 0.5)}" x2="${f(lay.ix + lay.iw / 2)}" y2="${f(h * 0.5)}" stroke="${GOLD}" stroke-width="0.4"/>`;
+    s += `<text x="${f(lay.ix)}" y="${f(h * 0.34)}" text-anchor="middle" font-family="Arial,sans-serif" font-size="${f(lay.itemFont)}" font-weight="bold">${esc(product_name)}</text>`;
+    s += show_lines
+      ? `<line x1="${f(lay.ix - lay.iw / 2)}" y1="${f(h * 0.5)}" x2="${f(lay.ix + lay.iw / 2)}" y2="${f(h * 0.5)}" stroke="${GOLD}" stroke-width="0.4"/>`
+      : `<line x1="${f(lay.ix - lay.iw / 2)}" y1="${f(h * 0.5)}" x2="${f(lay.ix + lay.iw / 2)}" y2="${f(h * 0.5)}" stroke="#94a3b8" stroke-width="0.25" stroke-dasharray="1.5 1" data-preview-only="true"/>`;
   }
   if (hasPurity) {
     s += `<text x="${f(lay.ix)}" y="${f(h * 0.72)}" text-anchor="middle" font-family="Arial,sans-serif" font-size="${f(lay.purityFont)}" font-weight="bold">${esc(purity_huid)}</text>`;
