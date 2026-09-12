@@ -22,12 +22,23 @@ export default function HistoryPage({ reloadKey, onReprintLoaded }) {
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState(null);
   const [view, setView] = useState(null);
+  // Debounced search text so typing doesn't fire an API call per keystroke.
+  const [debQ, setDebQ] = useState(q);
+  const [debPurity, setDebPurity] = useState(purity);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebQ(q);
+      setDebPurity(purity);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q, purity]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setNotice(null);
     try {
-      const res = await api.history({ q, purity, preset, limit: 100 });
+      const res = await api.history({ q: debQ, purity: debPurity, preset, limit: 100 });
       setItems(res.items || []);
       setTotal(res.total ?? 0);
     } catch {
@@ -35,7 +46,7 @@ export default function HistoryPage({ reloadKey, onReprintLoaded }) {
     } finally {
       setLoading(false);
     }
-  }, [q, purity, preset]);
+  }, [debQ, debPurity, preset]);
 
   useEffect(() => {
     load();

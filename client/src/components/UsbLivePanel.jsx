@@ -42,7 +42,11 @@ export default function UsbLivePanel({ printerName, widthMm, heightMm, onPrinter
 
   useEffect(() => {
     poll();
-    timer.current = setInterval(poll, 3000);
+    // Calm background poll + skip when tab hidden (WMI calls are slow;
+    // no point re-rendering an invisible page).
+    timer.current = setInterval(() => {
+      if (!document.hidden) poll();
+    }, 5000);
     return () => clearInterval(timer.current);
   }, [poll]);
 
@@ -121,7 +125,7 @@ export default function UsbLivePanel({ printerName, widthMm, heightMm, onPrinter
             <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-500" />
           </span>
           <span className="text-sm font-bold text-slate-800">USB Printer — Live</span>
-          <span className="text-[11px] font-medium text-slate-400">checking every 3s</span>
+          <span className="text-[11px] font-medium text-slate-400">checking every 5s</span>
         </div>
         <button
           onClick={manualPoll}

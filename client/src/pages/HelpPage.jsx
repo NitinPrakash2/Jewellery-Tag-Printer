@@ -162,6 +162,7 @@ export default function HelpPage({ onGoSettings }) {
           <TroubleRow problem="Cover open" fix="Close the printer cover fully and retry." />
           <TroubleRow problem="Print too light / thin text" fix="Windows Settings → Printers → your printer → Printing preferences → raise Density/Darkness, then Test Print again." />
           <TroubleRow problem="Right edge cut off" fix="Tag is wider than the printer's maximum. Use the suggested fitting size." />
+          <TroubleRow problem="Print comes out upside-down / mirrored" fix="Settings → Print Calibration → tick Rotate print 180°, Save, then Test print. Preview rotates too so you can confirm." />
           <TroubleRow problem="Print slightly shifted" fix="Settings → Calibration: try 0.5–1 mm offsets + Test Print." />
           <TroubleRow problem="Red server dot" fix="The server window was closed — start it again, then refresh this page." />
         </div>

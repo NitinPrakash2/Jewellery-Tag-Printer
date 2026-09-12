@@ -32,7 +32,7 @@ def validate_only(payload: dict):
 
 @router.post("/tag/render", response_model=dict)
 def render_tag(req: TagRenderRequest, db: Session = Depends(get_db)):
-    from app.printing.calibration import Calibration, apply_calibration
+    from app.printing.calibration import Calibration, apply_calibration, parse_rotate_180
     from app.services import settings_service as ss
     from app.tag.renderer import (
         DEFAULT_TAG_HEIGHT_MM,
@@ -55,6 +55,7 @@ def render_tag(req: TagRenderRequest, db: Session = Depends(get_db)):
             offset_x_mm=float(s["calibration"].get("offset_x_mm", 0.0)),
             offset_y_mm=float(s["calibration"].get("offset_y_mm", 0.0)),
             scale=float(s["calibration"].get("scale", 1.0)),
+            rotate_180=parse_rotate_180(s["calibration"].get("rotate_180", 0)),
         )
     except ValueError:
         cal = Calibration()

@@ -1,6 +1,6 @@
-"""Calibration must REALLY move the print — offsets/scales are baked into
-the SVG transform, so preview and paper agree."""
-from app.printing.calibration import Calibration, apply_calibration
+"""Calibration must REALLY move the print — offsets/scales/rotation are baked
+into the SVG transform, so preview and paper agree."""
+from app.printing.calibration import Calibration, apply_calibration, parse_rotate_180
 from app.tag.renderer import build_tag_svg
 
 SVG = build_tag_svg("18Kt HUID", "Ring", "2.146", "2.146",
@@ -32,6 +32,37 @@ def test_offset_plus_scale_combined():
     out = apply_calibration(SVG, Calibration(offset_x_mm=1, scale=0.9))
     assert "translate(1 0)" in out
     assert "scale(0.9)" in out
+
+
+def test_rotate_180_flips_about_centre():
+    out = apply_calibration(SVG, Calibration(rotate_180=True))
+    # centre of 110x12 tag, 180° turn
+    assert "rotate(180 55 6)" in out
+    assert out.count("<g transform") == 1
+
+
+def test_rotate_parse():
+    assert parse_rotate_180("1") is True
+    assert parse_rotate_180("true") is True
+    assert parse_rotate_180("0") is False
+    assert parse_rotate_180("") is False
+    assert parse_rotate_180(None) is False
+
+
+def test_rotate_validation_rejects_garbage(client):
+    r = client.put("/api/settings/calibration", json={"rotate_180": "maybe"})
+    assert r.status_code == 422
+
+
+def test_full_flow_rotate_to_render(client):
+    r = client.put("/api/settings/calibration", json={"rotate_180": "1"})
+    assert r.status_code == 200
+    r2 = client.post("/api/tag/render", json={"purity_huid": "18Kt HUID",
+                                              "product_name": "Ring",
+                                              "gross_weight": "2.146",
+                                              "net_weight": "2.146"})
+    assert r2.status_code == 200
+    assert "rotate(180" in r2.json()["tag_svg"]
 
 
 def test_full_flow_settings_to_render(client):

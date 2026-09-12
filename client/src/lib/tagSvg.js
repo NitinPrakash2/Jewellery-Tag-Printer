@@ -155,7 +155,7 @@ export function tagWarnings(widthMm, heightMm, texts, showLess = true, tailMm = 
   return out;
 }
 
-export function buildTagSvg({ purity_huid, product_name, gross_weight, net_weight, shop_name = "", width_mm = 100, height_mm = 15, has_logo = false, logo_image = null, cal_x_mm = 0, cal_y_mm = 0, cal_scale = 1, show_less = true, tail_mm = 0, show_gross = true, show_net = true }) {
+export function buildTagSvg({ purity_huid, product_name, gross_weight, net_weight, shop_name = "", width_mm = 100, height_mm = 15, has_logo = false, logo_image = null, cal_x_mm = 0, cal_y_mm = 0, cal_scale = 1, cal_rotate = false, show_less = true, tail_mm = 0, show_gross = true, show_net = true }) {
   const f = (n) => +n.toFixed(2);
   const { initial, line1, line2 } = brandParts(shop_name);
   const less = computeLess(gross_weight, net_weight);
@@ -214,11 +214,13 @@ export function buildTagSvg({ purity_huid, product_name, gross_weight, net_weigh
   const calOx = Number(cal_x_mm) || 0;
   const calOy = Number(cal_y_mm) || 0;
   const calSc = Number(cal_scale) || 1;
+  const calRot = cal_rotate === true || String(cal_rotate).toLowerCase() === "1" || String(cal_rotate).toLowerCase() === "true";
   let inner = s;
   const t = [];
   if (calOx || calOy) t.push(`translate(${calOx} ${calOy})`);
   if (calSc !== 1)
     t.push(`translate(${w / 2} ${h / 2}) scale(${calSc}) translate(${-w / 2} ${-h / 2})`);
+  if (calRot) t.push(`rotate(180 ${w / 2} ${h / 2})`);
   if (t.length > 0) inner = `<g transform="${t.join(" ")}">${s}</g>`;
 
   return (

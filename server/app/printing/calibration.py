@@ -14,15 +14,27 @@ class Calibration:
     offset_x_mm: float = 0.0
     offset_y_mm: float = 0.0
     scale: float = 1.0
+    rotate_180: bool = False
 
     def is_neutral(self) -> bool:
-        return self.offset_x_mm == 0 and self.offset_y_mm == 0 and self.scale == 1.0
+        return (
+            self.offset_x_mm == 0
+            and self.offset_y_mm == 0
+            and self.scale == 1.0
+            and not self.rotate_180
+        )
 
     def describe(self) -> str:
         return (
             f"offset_x={self.offset_x_mm}mm "
-            f"offset_y={self.offset_y_mm}mm scale={self.scale}"
+            f"offset_y={self.offset_y_mm}mm scale={self.scale} "
+            f"rotate_180={self.rotate_180}"
         )
+
+
+def parse_rotate_180(value) -> bool:
+    """Settings store booleans as text ("0"/"1")."""
+    return str(value or "").strip().lower() in ("1", "true", "yes", "on")
 
 
 def _f(n: float) -> str:
@@ -49,6 +61,10 @@ def calibration_transform(cal: Calibration, width_mm: float, height_mm: float) -
             f"translate({_f(cx)} {_f(cy)}) scale({_f(cal.scale)}) "
             f"translate({_f(-cx)} {_f(-cy)})"
         )
+    if cal.rotate_180:
+        # 180° about the tag centre: fixes printers that feed/print upside-down.
+        cx, cy = width_mm / 2.0, height_mm / 2.0
+        parts.append(f"rotate(180 {_f(cx)} {_f(cy)})")
     return " ".join(parts)
 
 

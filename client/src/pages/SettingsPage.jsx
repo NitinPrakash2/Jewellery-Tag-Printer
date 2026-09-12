@@ -105,8 +105,10 @@ export default function SettingsPage({ settings, onSaved, onGoHelp }) {
   useEffect(() => {
     api.printers().then((r) => setPrinters(r.printers || [])).catch(() => {});
     const t = setInterval(() => {
-      api.printers().then((r) => setPrinters(r.printers || [])).catch(() => {});
-    }, 6000);
+      if (!document.hidden) {
+        api.printers().then((r) => setPrinters(r.printers || [])).catch(() => {});
+      }
+    }, 10000);
     return () => clearInterval(t);
   }, []);
 
@@ -369,6 +371,26 @@ export default function SettingsPage({ settings, onSaved, onGoHelp }) {
             <TextInput value={local?.calibration?.scale || ""} onChange={setVal("calibration", "scale")} inputMode="decimal" placeholder="1.0" />
           </Field>
         </div>
+        <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-slate-200 bg-white px-3.5 py-3 shadow-sm transition hover:border-slate-400">
+          <input
+            type="checkbox"
+            checked={["1", "true"].includes(String(local?.calibration?.rotate_180 || "0").toLowerCase())}
+            onChange={(e) => {
+              dirtyRef.current["calibration"] = true;
+              setLocal((s) => ({
+                ...s,
+                calibration: { ...(s.calibration || {}), rotate_180: e.target.checked ? "1" : "0" },
+              }));
+            }}
+            className="mt-0.5 h-4 w-4 accent-slate-900"
+          />
+          <span className="text-[13px] text-slate-700">
+            <span className="font-bold text-slate-900">Rotate print 180° (upside-down fix).</span>
+            <span className="block text-xs text-slate-500">
+              Tick this if labels come out flipped top-to-bottom, like a mirror image. Preview rotates too, so what you see is what prints.
+            </span>
+          </span>
+        </label>
         <div className="flex flex-wrap items-center gap-2.5">
           <button onClick={testPrint} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition duration-200 hover:bg-slate-50">Test print</button>
           <SaveBtn cat="calibration" />

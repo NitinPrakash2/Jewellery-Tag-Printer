@@ -131,10 +131,13 @@ def render_tag(db, cleaned: dict) -> str:
         show_net=cleaned.get("net_weight") is not None,
     )
     try:
+        from app.printing.calibration import parse_rotate_180
+
         cal = Calibration(
             offset_x_mm=float(s["calibration"].get("offset_x_mm", 0.0)),
             offset_y_mm=float(s["calibration"].get("offset_y_mm", 0.0)),
             scale=float(s["calibration"].get("scale", 1.0)),
+            rotate_180=parse_rotate_180(s["calibration"].get("rotate_180", 0)),
         )
     except ValueError:
         cal = Calibration()

@@ -37,18 +37,14 @@ body {
   background: transparent;
 }
 
-/* Tag preview SVGs fill their panel with premium depth effect */
+/* Tag preview SVGs fill their panel. NOTE: no drop-shadow/blur filters here —
+   filters repaint on every scroll frame and make scrolling laggy. Panels
+   carry their own cheap box-shadows instead. */
 .tag-svg svg {
   width: 100%;
   height: auto;
   display: block;
   overflow: visible;
-  filter: drop-shadow(0 2px 4px rgba(15, 23, 42, 0.1));
-  transition: filter 0.3s ease;
-}
-
-.tag-svg:hover svg {
-  filter: drop-shadow(0 2px 6px rgba(15, 23, 42, 0.15));
 }
 
 /* Hide number input spinners (Stepper provides its own) */
@@ -58,9 +54,10 @@ input::-webkit-inner-spin-button {
   margin: 0;
 }
 
-/* Smooth transitions for interactive elements */
+/* Smooth transitions for interactive elements (specific props only —
+   `transition: all` forces needless repaints while scrolling). */
 button, input, select, textarea {
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
 }
 
 /* Custom focus styles for better accessibility */
@@ -102,7 +99,6 @@ button:focus-visible {
   height: auto;
   display: block;
   overflow: visible;
-  filter: drop-shadow(0 2px 4px rgba(15, 23, 42, 0.1));
 }
 
 /* Premium dropdown entrance */

@@ -143,8 +143,8 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
     loadPrinters();
     // Silent background refresh so the dropdown always mirrors Windows.
     const t = setInterval(() => {
-      loadPrinters();
-    }, 8000);
+      if (!document.hidden) loadPrinters();
+    }, 12000);
     return () => clearInterval(t);
   }, [loadPrinters]);
   useEffect(() => {
@@ -191,6 +191,7 @@ export default function PrintPage({ settings, onSettingsSaved, refreshHistorySig
         cal_x_mm: settings?.calibration?.offset_x_mm,
         cal_y_mm: settings?.calibration?.offset_y_mm,
         cal_scale: settings?.calibration?.scale,
+        cal_rotate: settings?.calibration?.rotate_180,
         show_less: showLess,
         tail_mm: tagT,
         show_gross: showGross,
