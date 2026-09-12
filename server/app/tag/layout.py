@@ -17,16 +17,31 @@ CHAR_W = {"sans": 0.55, "serif": 0.62}
 MIN_FONT_MM = 0.8
 
 
+TAGLINE_TEXT = "TRUST IN EVERY CARAT"
+TAGLINE_SPACING = 0.3
+L1_SPACING = 1.0
+L2_SPACING = 1.0
+
+
 def fit_font(text: str, max_width_mm: float, max_height_mm: float,
-             family: str = "sans", bold: bool = False) -> float:
-    """Largest font (mm) letting `text` fit inside max_width x max_height."""
+             family: str = "sans", bold: bool = False,
+             spacing: float = 0.0) -> float:
+    """Largest font (mm) letting `text` fit inside max_width x max_height.
+
+    `spacing` is SVG letter-spacing in mm — it adds width after (almost)
+    every glyph, so the fit must budget for it too. Ignoring it was letting
+    spaced headlines (shop name, tagline) spill outside the tag border.
+    """
     if max_width_mm <= 0 or max_height_mm <= 0:
         return MIN_FONT_MM
     chars = len(str(text or ""))
     if chars == 0:
         return round(min(max_height_mm, 12.0), 2)
     boost = 1.06 if bold else 1.0
-    by_width = max_width_mm / (chars * CHAR_W.get(family, 0.55) * boost)
+    avail = max_width_mm - spacing * max(chars - 1, 0)
+    if avail <= 0:
+        return MIN_FONT_MM
+    by_width = avail / (chars * CHAR_W.get(family, 0.55) * boost)
     return round(max(MIN_FONT_MM, min(max_height_mm, by_width)), 2)
 
 
@@ -92,9 +107,10 @@ def tag_layout(width_mm: float, height_mm: float, texts: dict,
         "fold_x": fold_x,
         "logo_cx": logo_cx, "logo_hw": logo_hw,
         "mono_font": fit_font(mono, logo_hw * 2, h * 0.42, "serif", bold=True),
-        "l1_font": fit_font(l1, logo_hw * 2, h * 0.13, "serif"),
-        "l2_font": fit_font(l2, logo_hw * 2, h * 0.095),
-        "tagline_font": round(min(h * 0.062, 1.6), 2),
+        "l1_font": fit_font(l1, logo_hw * 2, h * 0.13, "serif", spacing=L1_SPACING),
+        "l2_font": fit_font(l2, logo_hw * 2, h * 0.095, spacing=L2_SPACING),
+        "tagline_font": fit_font(TAGLINE_TEXT, logo_hw * 2, min(h * 0.062, 1.6),
+                                 spacing=TAGLINE_SPACING),
         "ix": ix, "iw": iw,
         "back_font": round(back_font, 2),
         "item_font": round(back_font, 2),
@@ -112,12 +128,16 @@ def tag_layout(width_mm: float, height_mm: float, texts: dict,
     }
 
 
-def _overflow_mm(text: str, zone_mm: float, family: str, bold: bool) -> float:
+def _overflow_mm(text: str, zone_mm: float, family: str, bold: bool,
+                 spacing: float = 0.0) -> float:
     """How many mm `text` exceeds `zone_mm` even at the minimum font.
-    Zero means it fits (auto-fit shrank it safely)."""
-    if not str(text or "").strip():
+    Zero means it fits (auto-fit shrank it safely). Letter-spacing counts —
+    it adds real width after (almost) every glyph."""
+    s = str(text or "")
+    if not s.strip():
         return 0.0
-    need = len(str(text)) * CHAR_W.get(family, 0.55) * (1.06 if bold else 1.0) * MIN_FONT_MM
+    need = (len(s) * CHAR_W.get(family, 0.55) * (1.06 if bold else 1.0) * MIN_FONT_MM
+            + spacing * max(len(s) - 1, 0))
     return round(max(0.0, need - zone_mm), 2)
 
 
@@ -143,8 +163,9 @@ def layout_warnings(width_mm: float, height_mm: float, texts: dict,
 
     _add("Purity / HUID", _overflow_mm(texts.get("purity", ""), lay["iw"], "sans", True), "item zone")
     _add("Product name", _overflow_mm(f"ITEM - {texts.get('product', '')}", lay["iw"], "sans", False), "item zone")
-    _add("Shop name", _overflow_mm(f"{texts.get('shop_l1', '')} {texts.get('shop_l2', '')}".strip(),
-                                   lay["logo_hw"] * 2, "serif", False), "logo zone")
+    _add("Shop headline", _overflow_mm(texts.get("shop_l1", ""), lay["logo_hw"] * 2, "serif", False, L1_SPACING), "logo zone")
+    _add("Shop subline", _overflow_mm(texts.get("shop_l2", ""), lay["logo_hw"] * 2, "sans", False, L2_SPACING), "logo zone")
+    _add("Shop tagline", _overflow_mm(TAGLINE_TEXT, lay["logo_hw"] * 2, "sans", False, TAGLINE_SPACING), "logo zone")
     for label in lay["row_labels"]:
         key = {"Gross Wt.": "gross", "Less Wt.": "less", "Net Wt.": "net"}[label]
         val = texts.get(key, "")

@@ -54,12 +54,19 @@ export function shopInitials(name) {
   return (words[0][0] + words[1][0]).toUpperCase();
 }
 
-export function fitFont(text, maxW, maxH, family = "sans", bold = false) {
+export const TAGLINE_TEXT = "TRUST IN EVERY CARAT";
+export const TAGLINE_SPACING = 0.3;
+export const L1_SPACING = 1.0;
+export const L2_SPACING = 1.0;
+
+export function fitFont(text, maxW, maxH, family = "sans", bold = false, spacing = 0) {
   if (maxW <= 0 || maxH <= 0) return MIN_FONT_MM;
   const chars = String(text ?? "").length;
   if (chars === 0) return Math.round(Math.min(maxH, 12) * 100) / 100;
   const boost = bold ? 1.06 : 1.0;
-  const byW = maxW / (chars * (CHAR_W[family] || 0.55) * boost);
+  const avail = maxW - spacing * Math.max(chars - 1, 0);
+  if (avail <= 0) return MIN_FONT_MM;
+  const byW = avail / (chars * (CHAR_W[family] || 0.55) * boost);
   return Math.round(Math.max(MIN_FONT_MM, Math.min(maxH, byW)) * 100) / 100;
 }
 
@@ -96,9 +103,9 @@ export function tagLayout(widthMm, heightMm, texts, showLess = true, tailMm = 0,
     w, h, bodyX, bodyW, foldX, logoCx, logoHw, ix, iw,
     tail, tailX: bodyW,
     monoFont: fitFont(texts.initial, logoHw * 2, h * 0.42, "serif", true),
-    l1Font: fitFont(texts.line1, logoHw * 2, h * 0.13, "serif"),
-    l2Font: fitFont(texts.line2, logoHw * 2, h * 0.095),
-    taglineFont: Math.round(Math.min(h * 0.062, 1.6) * 100) / 100,
+    l1Font: fitFont(texts.line1, logoHw * 2, h * 0.13, "serif", false, L1_SPACING),
+    l2Font: fitFont(texts.line2, logoHw * 2, h * 0.095, "sans", false, L2_SPACING),
+    taglineFont: fitFont(TAGLINE_TEXT, logoHw * 2, Math.min(h * 0.062, 1.6), "sans", false, TAGLINE_SPACING),
     itemFont: backFont,
     purityFont: backFont,
     rowFont, rowYs,
@@ -111,10 +118,11 @@ export function tagLayout(widthMm, heightMm, texts, showLess = true, tailMm = 0,
   };
 }
 
-function overflowMm(text, zoneMm, family, bold) {
-  if (!String(text ?? "").trim()) return 0;
+function overflowMm(text, zoneMm, family, bold, spacing = 0) {
+  const s = String(text ?? "");
+  if (!s.trim()) return 0;
   const cw = CHAR_W[family] || 0.55;
-  const need = String(text).length * cw * (bold ? 1.06 : 1.0) * MIN_FONT_MM;
+  const need = s.length * cw * (bold ? 1.06 : 1.0) * MIN_FONT_MM + spacing * Math.max(s.length - 1, 0);
   return Math.round(Math.max(0, need - zoneMm) * 100) / 100;
 }
 
@@ -134,7 +142,9 @@ export function tagWarnings(widthMm, heightMm, texts, showLess = true, tailMm = 
   };
   add("Purity / HUID", overflowMm(texts.purity, lay.iw, "sans", true), "item zone");
   add("Product name", overflowMm(`ITEM - ${texts.product || ""}`, lay.iw, "sans", false), "item zone");
-  add("Shop name", overflowMm(`${texts.shop_l1 || ""} ${texts.shop_l2 || ""}`.trim(), lay.logoHw * 2, "serif", false), "logo zone");
+  add("Shop headline", overflowMm(texts.shop_l1, lay.logoHw * 2, "serif", false, L1_SPACING), "logo zone");
+  add("Shop subline", overflowMm(texts.shop_l2, lay.logoHw * 2, "sans", false, L2_SPACING), "logo zone");
+  add("Shop tagline", overflowMm(TAGLINE_TEXT, lay.logoHw * 2, "sans", false, TAGLINE_SPACING), "logo zone");
   const keyOf = { "Gross Wt.": "gross", "Less Wt.": "less", "Net Wt.": "net" };
   lay.rowLabels.forEach((label) => {
     const val = texts[keyOf[label]];
@@ -178,8 +188,8 @@ export function buildTagSvg({ purity_huid, product_name, gross_weight, net_weigh
       s += `<text x="${f(logoCx)}" y="${f(h * 0.62)}" text-anchor="middle" font-family="Georgia,serif" font-size="${f(lay.l1Font)}" font-weight="bold" letter-spacing="1" fill="${GOLD}">${esc(line1)}</text>`;
     }
     if (line2) {
-      s += `<text x="${f(logoCx)}" y="${f(h * 0.75)}" text-anchor="middle" font-family="Arial,sans-serif" font-size="${f(lay.l2Font)}" letter-spacing="1.5" fill="${GOLD}">${esc(line2)}</text>`;
-      s += `<text x="${f(logoCx)}" y="${f(h * 0.87)}" text-anchor="middle" font-family="Arial,sans-serif" font-size="${f(lay.taglineFont)}" letter-spacing="1">TRUST IN EVERY CARAT</text>`;
+      s += `<text x="${f(logoCx)}" y="${f(h * 0.75)}" text-anchor="middle" font-family="Arial,sans-serif" font-size="${f(lay.l2Font)}" letter-spacing="1.0" fill="${GOLD}">${esc(line2)}</text>`;
+      s += `<text x="${f(logoCx)}" y="${f(h * 0.87)}" text-anchor="middle" font-family="Arial,sans-serif" font-size="${f(lay.taglineFont)}" letter-spacing="0.3">TRUST IN EVERY CARAT</text>`;
     }
   }
   s += `<line x1="${f(foldX * 0.52)}" y1="${f(h * 0.12)}" x2="${f(foldX * 0.52)}" y2="${f(h * 0.88)}" stroke="black" stroke-width="0.35"/>`;

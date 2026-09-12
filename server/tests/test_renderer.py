@@ -65,6 +65,27 @@ def test_item_and_purity_fonts_synced():
     assert lay["item_font"] >= 2.0
 
 
+def test_spaced_headlines_stay_inside_zone():
+    # Regression: letter-spacing used to push ORNAMENTS/tagline outside
+    # the body border. Rendered width incl. spacing must fit the zone.
+    from app.tag.layout import CHAR_W, L1_SPACING, L2_SPACING, TAGLINE_SPACING, TAGLINE_TEXT
+
+    lay = tag_layout(100, 15, {"purity": "", "product": "",
+                               "gross": "", "less": "", "net": "",
+                               "shop_l1": "MANISH", "shop_l2": "ORNAMENTS",
+                               "initial": "M"}, show_less=False,
+                     show_gross=False, show_net=False, tail_mm=35)
+    zone = lay["logo_hw"] * 2
+    for text, font, spacing in [
+        ("MANISH", lay["l1_font"], L1_SPACING),
+        ("ORNAMENTS", lay["l2_font"], L2_SPACING),
+        (TAGLINE_TEXT, lay["tagline_font"], TAGLINE_SPACING),
+    ]:
+        rendered = len(text) * 0.62 * font + spacing * (len(text) - 1) \
+            if text == "MANISH" else len(text) * CHAR_W["sans"] * font + spacing * (len(text) - 1)
+        assert rendered <= zone + 0.01, (text, rendered, zone)
+
+
 def test_less_weight_computed():
     assert str(compute_less_weight("2.146", "2.146")) == "0.000"
     assert str(compute_less_weight("5.000", "4.900")) == "0.100"

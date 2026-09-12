@@ -146,12 +146,12 @@ def build_tag_svg(
             parts.append(
                 f'<text x="{_f(logo_cx)}" y="{_f(h * 0.75)}" text-anchor="middle" '
                 f'font-family="Arial,sans-serif" font-size="{_f(lay["l2_font"])}" '
-                f'letter-spacing="1.5" fill="{GOLD}">{_esc(line2)}</text>'
+                f'letter-spacing="1.0" fill="{GOLD}">{_esc(line2)}</text>'
             )
             parts.append(
                 f'<text x="{_f(logo_cx)}" y="{_f(h * 0.87)}" text-anchor="middle" '
                 f'font-family="Arial,sans-serif" font-size="{_f(lay["tagline_font"])}" '
-                f'letter-spacing="1">TRUST IN EVERY CARAT</text>'
+                f'letter-spacing="0.3">TRUST IN EVERY CARAT</text>'
             )
     # vertical divider between logo and item zones
     parts.append(

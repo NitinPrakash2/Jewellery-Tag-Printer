@@ -158,9 +158,17 @@ def printer_status(printer_name: str) -> PrinterInfo:
 
 
 def _fit_box(img_w: int, img_h: int, page_w: int, page_h: int) -> tuple[int, int, int, int]:
+    """Centered destination rect for Dib.draw as (x0, y0, x1, y1).
+
+    Pillow rects are corners, NOT x/y/width/height. Passing height as y1
+    inverts the rect whenever the driver page differs from the image
+    (e.g. default page vs 100x15 label) — and an inverted rect draws
+    NOTHING: paper comes out blank. That was the blank-paper bug.
+    """
     scale = min(page_w / img_w, page_h / img_h)
     w, h = max(1, int(img_w * scale)), max(1, int(img_h * scale))
-    return (page_w - w) // 2, (page_h - h) // 2, w, h
+    x0, y0 = (page_w - w) // 2, (page_h - h) // 2
+    return x0, y0, x0 + w, y0 + h
 
 
 def print_png(printer_name: str, png_bytes: bytes, copies: int = 1) -> str:

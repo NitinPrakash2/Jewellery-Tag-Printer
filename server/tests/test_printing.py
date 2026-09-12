@@ -73,6 +73,18 @@ def test_raster_uses_only_standard_fonts():
     assert fams <= {"Helvetica", "Times-Roman"}, fams
 
 
+def test_fit_box_is_corners_not_size():
+    # Dib.draw wants (x0, y0, x1, y1). A height-as-y1 rect inverts whenever
+    # the driver page differs from the label — printing BLANK paper.
+    from app.printing.windows_spool import _fit_box
+
+    x0, y0, x1, y1 = _fit_box(799, 120, 800, 600)
+    assert (x0, y0, x1, y1) == (0, 240, 800, 360)
+    assert x1 > x0 and y1 > y0
+    x0, y0, x1, y1 = _fit_box(799, 120, 799, 120)
+    assert (x0, y0, x1, y1) == (0, 0, 799, 120)
+
+
 def test_adapter_unknown_printer_returns_failure_not_raise():
     res = LP46NeoAdapter().print_svg("No Such Printer XYZ", _tag(), copies=1)
     assert res.ok is False
