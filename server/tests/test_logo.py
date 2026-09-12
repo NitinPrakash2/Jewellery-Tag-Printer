@@ -61,6 +61,29 @@ def test_upload_endpoint(client, monkeypatch, tmp_path):
     assert g2.json()["data_uri"] is None
 
 
+def test_transparent_logo_flattens_to_white(monkeypatch, tmp_path):
+    """Transparent PNG must come back as opaque RGB — otherwise thermal
+    printers render the transparent area as a solid black square."""
+    import base64
+    import io
+    import os
+
+    from PIL import Image
+
+    _isolate(monkeypatch, tmp_path)
+    img = Image.new("RGBA", (20, 20), (0, 0, 0, 0))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    path, err = ls.save_upload("logo.png", buf.getvalue())
+    assert err == ""
+    uri = ls.load_data_uri(path)
+    assert uri.startswith("data:image/png;base64,")
+    back = Image.open(io.BytesIO(base64.b64decode(uri.split(",", 1)[1])))
+    assert back.mode == "RGB"
+    assert back.getpixel((10, 10)) == (255, 255, 255)
+    assert os.path.getsize(path) <= ls.MAX_BYTES
+
+
 def test_upload_rejects_bad_file(client, monkeypatch, tmp_path):
     _isolate(monkeypatch, tmp_path)
     r = client.post("/api/settings/logo", files={"file": ("x.txt", b"hi", "text/plain")})

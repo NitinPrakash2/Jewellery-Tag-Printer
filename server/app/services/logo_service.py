@@ -80,17 +80,57 @@ def delete_logo() -> None:
             log.error("logo delete failed: %s", exc)
 
 
+def _flatten_to_rgb(raw: bytes) -> tuple[bytes, str] | tuple[None, None]:
+    """PNG/JPG bytes -> opaque RGB PNG bytes (or (None, None) on failure).
+
+    Transparent pixels become WHITE. Without this, renderers print the
+    transparent area as solid BLACK (the black-square logo bug on thermal).
+    """
+    import io
+
+    from PIL import Image
+
+    try:
+        img = Image.open(io.BytesIO(raw))
+        if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+            bg = Image.new("RGB", img.size, (255, 255, 255))
+            alpha = img.convert("RGBA").split()[-1]
+            bg.paste(img.convert("RGB"), mask=alpha)
+            img = bg
+        else:
+            img = img.convert("RGB")
+        out = io.BytesIO()
+        img.save(out, format="PNG")
+        return out.getvalue(), "image/png"
+    except Exception as exc:
+        log.error("logo flatten failed: %s", exc)
+        return None, None
+
+
 def load_data_uri(path: str | None) -> str | None:
-    """Base64 data URI for embedding in SVG, or None when unavailable."""
+    """Base64 data URI for embedding in SVG, or None when unavailable.
+
+    Raster images are flattened onto white first — transparency would
+    otherwise print as a solid black square on thermal printers.
+    """
     if not path or not os.path.isfile(path):
         return None
     try:
         if os.path.getsize(path) > MAX_BYTES:
             return None
         ext = os.path.splitext(path)[1].lower()
-        mime = ALLOWED.get(ext, ("image/png", []))[0]
         with open(path, "rb") as f:
             raw = f.read()
+        if ext in (".png", ".jpg", ".jpeg"):
+            flat, mime = _flatten_to_rgb(raw)
+            if flat is not None:
+                raw, mime = flat, mime
+            else:
+                # Unreadable image: keep original bytes (old behaviour) so a
+                # weird-but-valid file still has a chance to print.
+                mime = ALLOWED.get(ext, ("image/png", []))[0]
+        else:
+            mime = ALLOWED.get(ext, ("image/png", []))[0]
         b64 = base64.b64encode(raw).decode("ascii")
         return f"data:{mime};base64,{b64}"
     except OSError as exc:

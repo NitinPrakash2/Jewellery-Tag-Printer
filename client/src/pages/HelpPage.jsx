@@ -161,6 +161,7 @@ export default function HelpPage({ onGoSettings }) {
           <TroubleRow problem="Out of paper" fix="The label roll is empty — load a new roll." />
           <TroubleRow problem="Cover open" fix="Close the printer cover fully and retry." />
           <TroubleRow problem="Print too light / thin text" fix="Windows Settings → Printers → your printer → Printing preferences → raise Density/Darkness, then Test Print again." />
+          <TroubleRow problem="Print spills onto the next label" fix="Driver paper size is wrong: set your exact tag size, press Run Setup again, then run the printer's own media auto-calibration (usually hold Feed while powering on)." />
           <TroubleRow problem="Right edge cut off" fix="Tag is wider than the printer's maximum. Use the suggested fitting size." />
           <TroubleRow problem="Print comes out upside-down / mirrored" fix="Settings → Print Calibration → tick Rotate print 180°, Save, then Test print. Preview rotates too so you can confirm." />
           <TroubleRow problem="Print slightly shifted" fix="Settings → Calibration: try 0.5–1 mm offsets + Test Print." />
