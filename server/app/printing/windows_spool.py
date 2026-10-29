@@ -167,11 +167,12 @@ def _fit_box(img_w: int, img_h: int, page_w: int, page_h: int) -> tuple[int, int
     Also, y0 must be 0 (top of the label) because thermal printers feed continuously
     from y=0; centering vertically in a taller driver page pushes content across multiple labels.
     """
-    if img_w <= page_w and img_h <= page_h:
-        return 0, 0, img_w, img_h
-    scale = min(page_w / img_w, page_h / img_h)
+    scale = min(1.0, page_w / img_w, page_h / img_h)
     w, h = max(1, int(img_w * scale)), max(1, int(img_h * scale))
-    return 0, 0, w, h
+    x0 = 0
+    # Center vertically if driver page height has extra margin
+    y0 = max(0, (page_h - h) // 2) if page_h >= h else 0
+    return x0, y0, x0 + w, y0 + h
 
 
 def print_png(printer_name: str, png_bytes: bytes, copies: int = 1,
@@ -194,10 +195,7 @@ def print_png(printer_name: str, png_bytes: bytes, copies: int = 1,
 
     copies = max(1, min(int(copies or 1), 99))
     try:
-        raw_img = Image.open(io.BytesIO(png_bytes)).convert("L")
-        # Pure B&W threshold: eliminates printer driver halftoning/dithering
-        # which makes small fonts fuzzy and broken on 203 DPI thermal heads.
-        img = raw_img.point(lambda p: 255 if p > 190 else 0, mode="1").convert("RGB")
+        img = Image.open(io.BytesIO(png_bytes)).convert("RGB")
     except Exception as exc:
         raise SpoolError(f"Print image was unreadable: {exc}")
 

@@ -85,8 +85,8 @@ export function tagLayout(widthMm, heightMm, texts, showLess = true, tailMm = 0,
   // Item + purity share ONE font so both lines always match in size.
   const backFont =
     Math.round(Math.min(
-      fitFont(texts.product, iw, h * 0.17, "sans", true),
-      fitFont(texts.purity, iw, h * 0.17, "sans", true)
+      fitFont(texts.product, iw * 0.94, h * 0.22, "sans", true),
+      fitFont(texts.purity, iw * 0.94, h * 0.22, "sans", true)
     ) * 100) / 100;
 
   const fw = bodyW - foldX;
@@ -95,9 +95,10 @@ export function tagLayout(widthMm, heightMm, texts, showLess = true, tailMm = 0,
   if (showLess) fullRows.push(`Less Wt. : ${texts.less || ""}`);
   if (showNet) fullRows.push(`Net Wt. : ${texts.net || ""}`);
   const n = fullRows.length;
+  const maxRowFont = h * (n <= 2 ? 0.30 : 0.24);
   const rowFont =
-    Math.round(Math.min(h * 0.2, ...fullRows.map((r) => fitFont(r, fw * 0.88, h * 0.2, "sans", true))) * 100) / 100;
-  const rowYs = fullRows.map((_, i) => (n > 1 ? h * (0.3 + (0.5 * i) / (n - 1)) : h * 0.55));
+    Math.round(Math.min(maxRowFont, ...fullRows.map((r) => fitFont(r, fw * 1.05, maxRowFont, "sans", false))) * 100) / 100;
+  const rowYs = n === 1 ? [h * 0.55] : n === 2 ? [h * 0.40, h * 0.70] : fullRows.map((_, i) => h * (0.31 + (0.5 * i) / (n - 1)));
 
   return {
     w, h, bodyX, bodyW, foldX, logoCx, logoHw, ix, iw,
@@ -209,13 +210,13 @@ export function buildTagSvg({ purity_huid, product_name, gross_weight, net_weigh
   const hasProduct = String(product_name ?? "").trim() !== "";
   const hasPurity = String(purity_huid ?? "").trim() !== "";
   if (hasProduct) {
-    s += `<text x="${f(lay.ix)}" y="${f(h * 0.34)}" text-anchor="middle" font-family="Arial,sans-serif" font-size="${f(lay.itemFont)}" font-weight="bold">${esc(product_name)}</text>`;
+    s += `<text x="${f(lay.ix)}" y="${f(h * 0.38)}" text-anchor="middle" font-family="Arial,sans-serif" font-size="${f(lay.itemFont)}" font-weight="bold">${esc(product_name)}</text>`;
     s += show_lines
       ? `<line x1="${f(lay.ix - lay.iw / 2)}" y1="${f(h * 0.5)}" x2="${f(lay.ix + lay.iw / 2)}" y2="${f(h * 0.5)}" stroke="${GOLD}" stroke-width="0.4"/>`
       : `<line x1="${f(lay.ix - lay.iw / 2)}" y1="${f(h * 0.5)}" x2="${f(lay.ix + lay.iw / 2)}" y2="${f(h * 0.5)}" stroke="#94a3b8" stroke-width="0.25" stroke-dasharray="1.5 1" data-preview-only="true"/>`;
   }
   if (hasPurity) {
-    s += `<text x="${f(lay.ix)}" y="${f(h * 0.72)}" text-anchor="middle" font-family="Arial,sans-serif" font-size="${f(lay.purityFont)}" font-weight="bold">${esc(purity_huid)}</text>`;
+    s += `<text x="${f(lay.ix)}" y="${f(h * 0.74)}" text-anchor="middle" font-family="Arial,sans-serif" font-size="${f(lay.purityFont)}" font-weight="bold">${esc(purity_huid)}</text>`;
   }
 
   // ---- FRONT ----

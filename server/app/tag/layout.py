@@ -76,8 +76,8 @@ def tag_layout(width_mm: float, height_mm: float, texts: dict,
     # Item + purity share ONE font so both lines always match in size.
     # It fits the longer of the two inside the item zone (both render bold).
     back_font = min(
-        fit_font(item, iw, h * 0.17, bold=True),
-        fit_font(purity, iw, h * 0.17, bold=True),
+        fit_font(item, iw * 0.94, h * 0.22, bold=True),
+        fit_font(purity, iw * 0.94, h * 0.22, bold=True),
     )
 
     # ---- front rows (single centred "Label : value" line each) ----
@@ -90,15 +90,23 @@ def tag_layout(width_mm: float, height_mm: float, texts: dict,
         full_rows.append(f"Less Wt. : {texts.get('less', '')}")
     if show_net:
         full_rows.append(f"Net Wt. : {texts.get('net', '')}")
-    # Height budget raised (0.17 -> 0.20 of tag height): thermal labels need
-    # chunky glyphs — thin strokes print faint and unreadable.
-    row_font = min(
-        [h * 0.20]
-        + [fit_font(r, fw * 0.88, h * 0.20, bold=True) for r in full_rows]
-    )
+    # Height budget raised (0.24 of tag height): thermal labels need
+    # large, bold, chunky glyphs for crystal clear legibility.
     n = len(full_rows)
-    row_ys = [h * (0.30 + 0.50 * i / max(n - 1, 1)) if n > 1 else h * 0.55
-              for i in range(n)]
+    max_row_font = h * (0.30 if n <= 2 else 0.24)
+    # Digits and spaces in weights are narrower than avg glyphs, so fw * 1.05 gives
+    # a crisp, bold font that still leaves safety margin inside fw.
+    row_font = min(
+        [max_row_font]
+        + [fit_font(r, fw * 1.05, max_row_font, bold=False) for r in full_rows]
+    )
+    # Balanced vertical centering (equal margin top and bottom)
+    if n == 1:
+        row_ys = [h * 0.55]
+    elif n == 2:
+        row_ys = [h * 0.40, h * 0.70]
+    else:
+        row_ys = [h * (0.31 + 0.50 * i / (n - 1)) for i in range(n)]
 
     return {
         "w": w, "h": h,

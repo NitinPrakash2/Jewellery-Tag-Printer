@@ -184,7 +184,7 @@ def build_tag_svg(
     # Final design: product name only, no "ITEM -" prefix.
     if str(product_name or "").strip():
         parts.append(
-            f'<text x="{_f(lay["ix"])}" y="{_f(h * 0.34)}" text-anchor="middle" '
+            f'<text x="{_f(lay["ix"])}" y="{_f(h * 0.38)}" text-anchor="middle" '
             f'font-family="Arial,sans-serif" font-size="{_f(lay["item_font"])}" '
             f'font-weight="bold">'
             f"{_esc(product_name)}</text>"
@@ -204,7 +204,7 @@ def build_tag_svg(
             )
     if str(purity_huid or "").strip():
         parts.append(
-            f'<text x="{_f(lay["ix"])}" y="{_f(h * 0.72)}" text-anchor="middle" '
+            f'<text x="{_f(lay["ix"])}" y="{_f(h * 0.74)}" text-anchor="middle" '
             f'font-family="Arial,sans-serif" font-size="{_f(lay["purity_font"])}" '
             f'font-weight="bold">{_esc(purity_huid)}</text>'
         )
