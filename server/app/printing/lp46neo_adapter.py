@@ -63,9 +63,12 @@ class LP46NeoAdapter(PrinterAdapter):
                 raise PrinterNotFound(msg)
             return PrinterInfo(name=printer_name, status=f"error:{msg[:120]}")
 
-    def _print_bitmap(self, printer_name: str, png: bytes, copies: int) -> PrintJobResult:
+    def _print_bitmap(self, printer_name: str, png: bytes, copies: int,
+                      width_mm: float = 0.0, height_mm: float = 0.0) -> PrintJobResult:
         try:
-            message = windows_spool.print_png(printer_name, png, copies=copies)
+            message = windows_spool.print_png(
+                printer_name, png, copies=copies, width_mm=width_mm, height_mm=height_mm
+            )
             return PrintJobResult(ok=True, message=message)
         except Exception as exc:
             log.error("spool failed on %s: %s", printer_name, exc)
@@ -94,7 +97,7 @@ class LP46NeoAdapter(PrinterAdapter):
             png = svg_to_png_bytes(svg, w, h, dpi=DPI)
         except RasterError as exc:
             return PrintJobResult(ok=False, message=str(exc))
-        return self._print_bitmap(printer_name, png, copies)
+        return self._print_bitmap(printer_name, png, copies, width_mm=w, height_mm=h)
 
     def print_test(self, printer_name: str) -> PrintJobResult:
         from app.printing.raster import svg_to_png_bytes

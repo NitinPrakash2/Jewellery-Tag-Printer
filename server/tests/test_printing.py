@@ -74,15 +74,18 @@ def test_raster_uses_only_standard_fonts():
 
 
 def test_fit_box_is_corners_not_size():
-    # Dib.draw wants (x0, y0, x1, y1). A height-as-y1 rect inverts whenever
-    # the driver page differs from the label — printing BLANK paper.
+    # Dib.draw wants (x0, y0, x1, y1). When image fits, map 1:1 at (0, 0)
+    # without scaling to avoid GDI StretchDIBits distortion/blurriness.
     from app.printing.windows_spool import _fit_box
 
     x0, y0, x1, y1 = _fit_box(799, 120, 800, 600)
-    assert (x0, y0, x1, y1) == (0, 240, 800, 360)
+    assert (x0, y0, x1, y1) == (0, 0, 799, 120)
     assert x1 > x0 and y1 > y0
     x0, y0, x1, y1 = _fit_box(799, 120, 799, 120)
     assert (x0, y0, x1, y1) == (0, 0, 799, 120)
+    # When image is larger than printable page, downscale proportionally
+    x0, y0, x1, y1 = _fit_box(1000, 200, 500, 500)
+    assert (x0, y0, x1, y1) == (0, 0, 500, 100)
 
 
 def test_adapter_unknown_printer_returns_failure_not_raise():

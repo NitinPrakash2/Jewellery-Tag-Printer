@@ -158,24 +158,29 @@ def printer_status(printer_name: str) -> PrinterInfo:
 
 
 def _fit_box(img_w: int, img_h: int, page_w: int, page_h: int) -> tuple[int, int, int, int]:
-    """Centered destination rect for Dib.draw as (x0, y0, x1, y1).
+    """Destination rect for Dib.draw as (x0, y0, x1, y1).
 
-    Pillow rects are corners, NOT x/y/width/height. Passing height as y1
-    inverts the rect whenever the driver page differs from the image
-    (e.g. default page vs 100x15 label) — and an inverted rect draws
-    NOTHING: paper comes out blank. That was the blank-paper bug.
+    On thermal label printers, images are rasterized to the printer's native
+    203 DPI. If the image fits within the printable area, draw 1:1 at (0, 0)
+    without any scaling. Upscaling or fractional scaling triggers GDI StretchDIBits
+    nearest-neighbour line-dropping/duplication, causing jagged saw-tooth distortion.
+    Also, y0 must be 0 (top of the label) because thermal printers feed continuously
+    from y=0; centering vertically in a taller driver page pushes content across multiple labels.
     """
+    if img_w <= page_w and img_h <= page_h:
+        return 0, 0, img_w, img_h
     scale = min(page_w / img_w, page_h / img_h)
     w, h = max(1, int(img_w * scale)), max(1, int(img_h * scale))
-    x0, y0 = (page_w - w) // 2, (page_h - h) // 2
-    return x0, y0, x0 + w, y0 + h
+    return 0, 0, w, h
 
 
-def print_png(printer_name: str, png_bytes: bytes, copies: int = 1) -> str:
-    """Spool PNG bytes to the Windows printer. Returns a success message."""
+def print_png(printer_name: str, png_bytes: bytes, copies: int = 1,
+              width_mm: float = 0.0, height_mm: float = 0.0) -> str:
+    """Spool PNG bytes to the Windows printer with exact page size. Returns a success message."""
     _ensure_win32_dlls()
     try:
         import win32con
+        import win32gui
         import win32ui
         from PIL.ImageWin import Dib
     except Exception as exc:
@@ -189,18 +194,64 @@ def print_png(printer_name: str, png_bytes: bytes, copies: int = 1) -> str:
 
     copies = max(1, min(int(copies or 1), 99))
     try:
-        img = Image.open(io.BytesIO(png_bytes)).convert("RGB")
+        raw_img = Image.open(io.BytesIO(png_bytes)).convert("L")
+        # Pure B&W threshold: eliminates printer driver halftoning/dithering
+        # which makes small fonts fuzzy and broken on 203 DPI thermal heads.
+        img = raw_img.point(lambda p: 255 if p > 190 else 0, mode="1").convert("RGB")
     except Exception as exc:
         raise SpoolError(f"Print image was unreadable: {exc}")
 
+    if width_mm <= 0:
+        width_mm = round(img.size[0] / 203.0 * 25.4, 1)
+    if height_mm <= 0:
+        height_mm = round(img.size[1] / 203.0 * 25.4, 1)
+
+    win32print = _win32print()
+
+    # Automatically ensure Windows knows this custom form name and size
     try:
-        hdc = win32ui.CreateDC()
-        hdc.CreatePrinterDC(printer_name)
-    except Exception:
-        raise SpoolError(
-            f"Printer '{printer_name}' was not found. "
-            "Check it is installed, connected via USB and powered on."
-        )
+        ensure_label_size(printer_name, width_mm, height_mm)
+    except Exception as exc:
+        log.debug("ensure_label_size during print skipped: %s", exc)
+
+    # Configure DEVMODE for this specific print job so the driver doesn't feed extra labels
+    hdc = None
+    devmode = None
+    try:
+        hp = win32print.OpenPrinter(printer_name)
+        try:
+            devmode = win32print.GetPrinter(hp, 2).get("pDevMode")
+        finally:
+            win32print.ClosePrinter(hp)
+    except Exception as exc:
+        log.warning("could not read devmode for %s: %s", printer_name, exc)
+
+    if devmode is not None:
+        try:
+            DMPAPER_USER = 256
+            DM_FIELDS = (win32con.DM_PAPERSIZE | win32con.DM_PAPERLENGTH |
+                         win32con.DM_PAPERWIDTH | win32con.DM_FORMNAME)
+            devmode.Fields = devmode.Fields | DM_FIELDS
+            devmode.PaperSize = DMPAPER_USER
+            devmode.PaperWidth = int(round(width_mm * 10))   # tenths of a mm
+            devmode.PaperLength = int(round(height_mm * 10)) # tenths of a mm
+            devmode.FormName = form_name_for(width_mm, height_mm)
+            hdc_handle = win32gui.CreateDC("WINSPOOL", printer_name, devmode)
+            if hdc_handle:
+                hdc = win32ui.CreateDCFromHandle(hdc_handle)
+        except Exception as exc:
+            log.warning("CreateDC with custom devmode failed (%s), falling back to default DC", exc)
+            hdc = None
+
+    if hdc is None:
+        try:
+            hdc = win32ui.CreateDC()
+            hdc.CreatePrinterDC(printer_name)
+        except Exception:
+            raise SpoolError(
+                f"Printer '{printer_name}' was not found. "
+                "Check it is installed, connected via USB and powered on."
+            )
     try:
         page_w = hdc.GetDeviceCaps(win32con.HORZRES)
         page_h = hdc.GetDeviceCaps(win32con.VERTRES)
@@ -226,7 +277,7 @@ def print_png(printer_name: str, png_bytes: bytes, copies: int = 1) -> str:
             hdc.DeleteDC()
         except Exception:
             pass
-    log.info("spooled %s copie(s) to %s", copies, printer_name)
+    log.info("spooled %s copie(s) to %s (size %sx%s mm)", copies, printer_name, width_mm, height_mm)
     return f"Printed {copies} copie(s) on {printer_name}."
 
 
