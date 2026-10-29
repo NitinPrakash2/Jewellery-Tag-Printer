@@ -45,6 +45,8 @@ def _lan_ip() -> str:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
+        from app.database.session import create_all
+        create_all()
         with get_engine().connect() as conn:
             conn.execute(text("SELECT 1"))
         log.info("startup: database reachable")
@@ -81,6 +83,8 @@ else:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
+        from app.database.session import create_all
+        create_all()
         with get_engine().connect() as conn:
             conn.execute(text("SELECT 1"))
         log.info("startup: database reachable")

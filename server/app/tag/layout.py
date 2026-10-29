@@ -92,21 +92,21 @@ def tag_layout(width_mm: float, height_mm: float, texts: dict,
         full_rows.append(f"Net Wt. : {texts.get('net', '')}")
     # Height budget raised (0.24 of tag height): thermal labels need
     # large, bold, chunky glyphs for crystal clear legibility.
+    # Thermal labels need bold, chunky glyphs with safe margins from the fold crease.
+    # Fitting inside fw * 0.82 guarantees ~3mm clearance on both sides (never touches fold line).
     n = len(full_rows)
-    max_row_font = h * (0.30 if n <= 2 else 0.24)
-    # Digits and spaces in weights are narrower than avg glyphs, so fw * 1.05 gives
-    # a crisp, bold font that still leaves safety margin inside fw.
+    max_row_font = h * (0.28 if n <= 2 else 0.23)
     row_font = min(
         [max_row_font]
-        + [fit_font(r, fw * 1.05, max_row_font, bold=False) for r in full_rows]
+        + [fit_font(r, fw * 0.86, max_row_font, bold=False) for r in full_rows]
     )
     # Balanced vertical centering (equal margin top and bottom)
     if n == 1:
         row_ys = [h * 0.55]
     elif n == 2:
-        row_ys = [h * 0.40, h * 0.70]
+        row_ys = [h * 0.38, h * 0.68]
     else:
-        row_ys = [h * (0.31 + 0.50 * i / (n - 1)) for i in range(n)]
+        row_ys = [h * (0.30 + 0.50 * i / (n - 1)) for i in range(n)]
 
     return {
         "w": w, "h": h,

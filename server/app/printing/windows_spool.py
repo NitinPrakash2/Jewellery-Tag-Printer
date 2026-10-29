@@ -195,7 +195,11 @@ def print_png(printer_name: str, png_bytes: bytes, copies: int = 1,
 
     copies = max(1, min(int(copies or 1), 99))
     try:
-        img = Image.open(io.BytesIO(png_bytes)).convert("RGB")
+        raw_img = Image.open(io.BytesIO(png_bytes)).convert("L")
+        # Pure B&W threshold: eliminates printer driver halftoning/dithering
+        # which makes small fonts fuzzy and broken on 203 DPI thermal heads.
+        # Threshold 200 preserves crisp, thick, solid jet-black letter strokes.
+        img = raw_img.point(lambda p: 255 if p > 200 else 0, mode="1").convert("RGB")
     except Exception as exc:
         raise SpoolError(f"Print image was unreadable: {exc}")
 

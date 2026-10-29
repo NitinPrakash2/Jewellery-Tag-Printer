@@ -95,10 +95,10 @@ export function tagLayout(widthMm, heightMm, texts, showLess = true, tailMm = 0,
   if (showLess) fullRows.push(`Less Wt. : ${texts.less || ""}`);
   if (showNet) fullRows.push(`Net Wt. : ${texts.net || ""}`);
   const n = fullRows.length;
-  const maxRowFont = h * (n <= 2 ? 0.30 : 0.24);
+  const maxRowFont = h * (n <= 2 ? 0.28 : 0.23);
   const rowFont =
-    Math.round(Math.min(maxRowFont, ...fullRows.map((r) => fitFont(r, fw * 1.05, maxRowFont, "sans", false))) * 100) / 100;
-  const rowYs = n === 1 ? [h * 0.55] : n === 2 ? [h * 0.40, h * 0.70] : fullRows.map((_, i) => h * (0.31 + (0.5 * i) / (n - 1)));
+    Math.round(Math.min(maxRowFont, ...fullRows.map((r) => fitFont(r, fw * 0.86, maxRowFont, "sans", false))) * 100) / 100;
+  const rowYs = n === 1 ? [h * 0.55] : n === 2 ? [h * 0.38, h * 0.68] : fullRows.map((_, i) => h * (0.30 + (0.5 * i) / (n - 1)));
 
   return {
     w, h, bodyX, bodyW, foldX, logoCx, logoHw, ix, iw,
