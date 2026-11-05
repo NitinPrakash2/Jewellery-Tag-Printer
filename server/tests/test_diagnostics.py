@@ -35,7 +35,7 @@ def test_failed_print_is_recorded(client, monkeypatch):
         def print_svg(self, printer_name, svg, copies=1):
             return PrintJobResult(ok=False, message="cable unplugged (simulated)")
 
-        def print_test(self, printer_name):
+        def print_test(self, printer_name, width_mm=0.0, height_mm=0.0):
             return PrintJobResult(ok=False, message="nope")
 
     monkeypatch.setattr(rp, "get_adapter", lambda: DeadAdapter())

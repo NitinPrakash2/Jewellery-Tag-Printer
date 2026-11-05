@@ -11,12 +11,19 @@ Setup required once per printer (Windows Settings > Printers):
 import io
 import os
 
+from app.diagnostics import record
 from app.logging_setup import log
 from app.printing.printer_adapter import PrinterInfo
+from app.tag.units import DPI
 
 
 class SpoolError(Exception):
     pass
+
+
+# Identifies the bitmap path in /api/health so support can prove which build
+# is installed. "1-bit-dib" = direct SetDIBitsToDevice, no dithering possible.
+PRINT_MODE = "1-bit-dib"
 
 
 def _ensure_win32_dlls() -> None:
@@ -158,21 +165,127 @@ def printer_status(printer_name: str) -> PrinterInfo:
 
 
 def _fit_box(img_w: int, img_h: int, page_w: int, page_h: int) -> tuple[int, int, int, int]:
-    """Destination rect for Dib.draw as (x0, y0, x1, y1).
+    """Destination rect as (x0, y0, x1, y1) — always 1:1, top-left.
 
-    On thermal label printers, images are rasterized to the printer's native
-    203 DPI. If the image fits within the printable area, draw 1:1 at (0, 0)
-    without any scaling. Upscaling or fractional scaling triggers GDI StretchDIBits
-    nearest-neighbour line-dropping/duplication, causing jagged saw-tooth distortion.
-    Also, y0 must be 0 (top of the label) because thermal printers feed continuously
-    from y=0; centering vertically in a taller driver page pushes content across multiple labels.
+    Thermal heads feed from the top edge, so the bitmap sits at (0, 0).
+    Never upscale: GDI/pillow resampling is what turned crisp 1-bit text
+    into the blurry dotted mess. The label size itself comes from the
+    driver form (DEVMODE), not from stretching the image.
     """
     scale = min(1.0, page_w / img_w, page_h / img_h)
     w, h = max(1, int(img_w * scale)), max(1, int(img_h * scale))
-    x0 = 0
-    # Center vertically if driver page height has extra margin
-    y0 = max(0, (page_h - h) // 2) if page_h >= h else 0
-    return x0, y0, x0 + w, y0 + h
+    return 0, 0, w, h
+
+
+def _dib_payload(img) -> bytes:
+    """Bottom-up 1-bpp DIB bits for a PIL mode "1" image.
+
+    PIL packs modes "1" rows top-down, MSB first, padded to whole bytes;
+    a Windows DIB needs 4-byte aligned rows and bottom-up order.
+    """
+    w, h = img.size
+    stride = ((w + 31) // 32) * 4
+    src_stride = (w + 7) // 8
+    raw = img.tobytes()
+    rows = [
+        raw[i * src_stride:(i + 1) * src_stride].ljust(stride, b"\x00")
+        for i in range(h)
+    ]
+    return b"".join(reversed(rows))
+
+
+def _blit_1bit(hdc_handle: int, img, x: int = 0, y: int = 0) -> None:
+    """Draw a mode "1" image with SetDIBitsToDevice — no scaling, no halftone.
+
+    Pillow's Dib.draw() goes through StretchDIBits, where the printer driver
+    is free to halftone/dither the bitmap (the dotted, blurry text bug).
+    Handing GDI a native 1-bit DIB means exactly one bit per printed dot:
+    black stays black, white stays white, nothing to dither.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    class BITMAPINFOHEADER(ctypes.Structure):
+        _fields_ = [
+            ("biSize", wintypes.DWORD),
+            ("biWidth", wintypes.LONG),
+            ("biHeight", wintypes.LONG),
+            ("biPlanes", wintypes.WORD),
+            ("biBitCount", wintypes.WORD),
+            ("biCompression", wintypes.DWORD),
+            ("biSizeImage", wintypes.DWORD),
+            ("biXPelsPerMeter", wintypes.LONG),
+            ("biYPelsPerMeter", wintypes.LONG),
+            ("biClrUsed", wintypes.DWORD),
+            ("biClrImportant", wintypes.DWORD),
+        ]
+
+    class RGBQUAD(ctypes.Structure):
+        _fields_ = [
+            ("rgbBlue", ctypes.c_ubyte),
+            ("rgbGreen", ctypes.c_ubyte),
+            ("rgbRed", ctypes.c_ubyte),
+            ("rgbReserved", ctypes.c_ubyte),
+        ]
+
+    class BITMAPINFO(ctypes.Structure):
+        _fields_ = [("bmiHeader", BITMAPINFOHEADER), ("bmiColors", RGBQUAD * 2)]
+
+    bits = _dib_payload(img)
+    w, h = img.size
+
+    bmi = BITMAPINFO()
+    bmi.bmiHeader.biSize = ctypes.sizeof(BITMAPINFOHEADER)
+    bmi.bmiHeader.biWidth = w
+    bmi.bmiHeader.biHeight = h       # positive: bottom-up (rows reversed above)
+    bmi.bmiHeader.biPlanes = 1
+    bmi.bmiHeader.biBitCount = 1
+    bmi.bmiHeader.biCompression = 0  # BI_RGB
+    # Tell the driver the bitmap is already at the printer's native 203 dpi.
+    # Leaving these at 0 makes some Unidrv label drivers assume screen (96) dpi
+    # and rescale the image, which is exactly what turns solid bold text into
+    # a dithered/dotted mess.
+    pels_per_metre = int(round(DPI / 0.0254))
+    bmi.bmiHeader.biXPelsPerMeter = pels_per_metre
+    bmi.bmiHeader.biYPelsPerMeter = pels_per_metre
+    bmi.bmiColors[0] = RGBQUAD(0, 0, 0, 0)          # 0 -> black ink
+    bmi.bmiColors[1] = RGBQUAD(255, 255, 255, 0)    # 1 -> white paper
+
+    buf = ctypes.create_string_buffer(bits, len(bits))
+    gdi32 = ctypes.windll.gdi32
+    drawn = gdi32.SetDIBitsToDevice(
+        wintypes.HDC(hdc_handle),
+        int(x), int(y), w, h,
+        0, 0, 0, h,
+        ctypes.cast(buf, ctypes.c_void_p),
+        ctypes.byref(bmi),
+        0,  # DIB_RGB_COLORS
+    )
+    if not drawn:
+        raise OSError("GDI rejected the 1-bit label bitmap")
+
+
+def _is_blank(img) -> bool:
+    """True when every pixel is white paper (nothing would be lost by cropping)."""
+    if img.width == 0 or img.height == 0:
+        return True
+    return img.convert("L").getextrema() == (255, 255)
+
+
+def print_size_message(img_w: int, img_h: int, page_w: int, page_h: int,
+                       width_mm: float, height_mm: float) -> str:
+    """Plain-language one-liner shown in Settings > Live Error Monitor.
+
+    The shop can screenshot this instead of hunting for a log file, and the
+    numbers say whether the driver ever had a chance to rescale the bitmap.
+    """
+    msg = (
+        f"Print bitmap {img_w}x{img_h} dots -> driver page {page_w}x{page_h} dots, "
+        f"{_fmt_mm(width_mm)}x{_fmt_mm(height_mm)} mm, 1-bit no-dither"
+    )
+    if page_w < img_w or page_h < img_h:
+        msg += " (driver page smaller: edge clipped, NOT rescaled)"
+    return msg
 
 
 def print_png(printer_name: str, png_bytes: bytes, copies: int = 1,
@@ -183,7 +296,6 @@ def print_png(printer_name: str, png_bytes: bytes, copies: int = 1,
         import win32con
         import win32gui
         import win32ui
-        from PIL.ImageWin import Dib
     except Exception as exc:
         raise SpoolError(
             "Windows printing libraries failed to load "
@@ -196,10 +308,10 @@ def print_png(printer_name: str, png_bytes: bytes, copies: int = 1,
     copies = max(1, min(int(copies or 1), 99))
     try:
         raw_img = Image.open(io.BytesIO(png_bytes)).convert("L")
-        # Pure B&W threshold: eliminates printer driver halftoning/dithering
-        # which makes small fonts fuzzy and broken on 203 DPI thermal heads.
+        # Pure B&W threshold: one bit per dot. Kept as mode "1" so the spooler
+        # can hand the driver a 1-bpp DIB — no greys means nothing to dither.
         # Threshold 200 preserves crisp, thick, solid jet-black letter strokes.
-        img = raw_img.point(lambda p: 255 if p > 200 else 0, mode="1").convert("RGB")
+        img = raw_img.point(lambda p: 255 if p > 200 else 0, mode="1")
     except Exception as exc:
         raise SpoolError(f"Print image was unreadable: {exc}")
 
@@ -222,7 +334,16 @@ def print_png(printer_name: str, png_bytes: bytes, copies: int = 1,
     try:
         hp = win32print.OpenPrinter(printer_name)
         try:
-            devmode = win32print.GetPrinter(hp, 2).get("pDevMode")
+            # Level 8 = the CURRENT USER's preferences (density, speed, media,
+            # halftone...). Level 2 returns driver defaults, which silently
+            # threw away the shop's printer settings on every job — a job that
+            # resets density is exactly how solid text turns into a dotted one.
+            try:
+                devmode = win32print.GetPrinter(hp, 8).get("pDevMode")
+            except Exception:
+                devmode = None
+            if devmode is None:
+                devmode = win32print.GetPrinter(hp, 2).get("pDevMode")
         finally:
             win32print.ClosePrinter(hp)
     except Exception as exc:
@@ -238,6 +359,20 @@ def print_png(printer_name: str, png_bytes: bytes, copies: int = 1,
             devmode.PaperWidth = int(round(width_mm * 10))   # tenths of a mm
             devmode.PaperLength = int(round(height_mm * 10)) # tenths of a mm
             devmode.FormName = form_name_for(width_mm, height_mm)
+            # Force monochrome + no dithering. The label is already pure 1-bit,
+            # so a driver halftone screen can only destroy it (the dotted print).
+            # Set the value FIRST, then mark the field valid — if a driver
+            # rejects the value we must not claim the field.
+            try:
+                devmode.DitherType = 1          # DMDITHER_NONE
+                devmode.Fields = devmode.Fields | win32con.DM_DITHERTYPE
+            except Exception as exc:
+                log.debug("driver rejected dmDitherType: %s", exc)
+            try:
+                devmode.Color = 1               # DMCOLOR_MONOCHROME
+                devmode.Fields = devmode.Fields | win32con.DM_COLOR
+            except Exception as exc:
+                log.debug("driver rejected dmColor: %s", exc)
             hdc_handle = win32gui.CreateDC("WINSPOOL", printer_name, devmode)
             if hdc_handle:
                 hdc = win32ui.CreateDCFromHandle(hdc_handle)
@@ -257,14 +392,49 @@ def print_png(printer_name: str, png_bytes: bytes, copies: int = 1,
     try:
         page_w = hdc.GetDeviceCaps(win32con.HORZRES)
         page_h = hdc.GetDeviceCaps(win32con.VERTRES)
-        box = _fit_box(img.size[0], img.size[1], page_w, page_h)
-        dib = Dib(img)
+        img_w, img_h = img.size
+        # Label drivers report a printable area a few dots narrower than the
+        # bitmap (e.g. 779 vs 799 for a 100 mm tag). If the bitmap is handed
+        # over bigger, the driver shrinks it to fit — and that 2.5% resample is
+        # what puts a vertical dotted/ragged phase through some glyphs.
+        # Trim the blank margin instead so driver page == bitmap, 1:1.
+        if (img_w, img_h) != (page_w, page_h):
+            cut_w = max(0, img_w - page_w)
+            cut_h = max(0, img_h - page_h)
+            if cut_w <= img_w * 0.06 and cut_h <= img_h * 0.06:
+                right = img.crop((min(img_w, page_w), 0, img_w, img_h))
+                bottom = img.crop((0, min(img_h, page_h), img_w, img_h))
+                if _is_blank(right) and _is_blank(bottom):
+                    cropped = img.crop((0, 0, min(img_w, page_w), min(img_h, page_h)))
+                    log.info(
+                        "cropped bitmap %sx%s -> %sx%s to match the driver page (1:1, no scaling)",
+                        img_w, img_h, *cropped.size,
+                    )
+                    img = cropped
+                    img_w, img_h = img.size
+                else:
+                    log.warning(
+                        "driver page %sx%s is smaller and the bitmap has ink at that "
+                        "edge — not cropping, the driver may clip or shrink",
+                        page_w, page_h,
+                    )
+        msg = print_size_message(img_w, img_h, page_w, page_h, width_mm, height_mm)
+        log.info(msg)
+        # Also surface it in Settings > Live Error Monitor as a green info line,
+        # so the shop can screenshot the exact bit/dot numbers straight from the app.
+        record("PRINT", "info", msg)
+        if page_w < img_w or page_h < img_h:
+            log.warning(
+                "driver page %sx%s px is SMALLER than the %sx%s bitmap — "
+                "the label size in the printer driver does not match the tag",
+                page_w, page_h, img_w, img_h,
+            )
         hdc.StartDoc("Jewellery Tag")
         try:
             for _ in range(copies):
                 hdc.StartPage()
                 try:
-                    dib.draw(hdc.GetHandleOutput(), box)
+                    _blit_1bit(hdc.GetHandleOutput(), img, 0, 0)
                 finally:
                     hdc.EndPage()
         finally:
@@ -279,7 +449,8 @@ def print_png(printer_name: str, png_bytes: bytes, copies: int = 1,
             hdc.DeleteDC()
         except Exception:
             pass
-    log.info("spooled %s copie(s) to %s (size %sx%s mm)", copies, printer_name, width_mm, height_mm)
+    log.info("spooled %s copie(s) to %s (size %sx%s mm, 1-bit no-dither)",
+             copies, printer_name, width_mm, height_mm)
     return f"Printed {copies} copie(s) on {printer_name}."
 
 

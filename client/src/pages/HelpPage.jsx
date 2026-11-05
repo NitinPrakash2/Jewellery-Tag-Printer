@@ -45,11 +45,16 @@ function TroubleRow({ problem, fix }) {
 
 export default function HelpPage({ onGoSettings }) {
   const [drivers, setDrivers] = useState([]);
+  const [health, setHealth] = useState(null);
 
   useEffect(() => {
     api
       .driverHelp()
       .then((h) => setDrivers(h?.drivers ? Object.values(h.drivers) : []))
+      .catch(() => {});
+    api
+      .health()
+      .then(setHealth)
       .catch(() => {});
   }, []);
 
@@ -165,6 +170,7 @@ export default function HelpPage({ onGoSettings }) {
           <TroubleRow problem="Right edge cut off" fix="Tag is wider than the printer's maximum. Use the suggested fitting size." />
           <TroubleRow problem="Print comes out upside-down / mirrored" fix="Settings → Print Calibration → tick Rotate print 180°, Save, then Test print. Preview rotates too so you can confirm." />
           <TroubleRow problem="Print slightly shifted" fix="Settings → Calibration: try 0.5–1 mm offsets + Test Print." />
+          <TroubleRow problem="Print looks dotted or blurry" fix="Open Settings → Live Error Monitor. Every print adds a green PRINT line with the exact dot sizes (e.g. Print bitmap 799x120 dots -> driver page 799x120 dots). Screenshot that line and send it to support — it tells us whether the driver rescaled the tag." />
           <TroubleRow problem="Red server dot" fix="The server window was closed — start it again, then refresh this page." />
         </div>
       </Card>
@@ -179,6 +185,11 @@ export default function HelpPage({ onGoSettings }) {
         <span className="flex items-center gap-1.5 text-[13px] text-green-700">
           <CheckCircle2 size={14} /> Setup is one-time per computer — daily use needs nothing technical.
         </span>
+        {health?.build && (
+          <span className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 font-mono text-[11px] text-slate-500">
+            build {health.build} · print {health.print_mode || "?"}
+          </span>
+        )}
       </div>
     </div>
   );

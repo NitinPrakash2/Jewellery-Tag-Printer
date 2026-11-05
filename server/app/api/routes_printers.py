@@ -53,7 +53,18 @@ def test_print(payload: dict, db: Session = Depends(get_db)):
         target = settings_service.get_category(db, "printer").get("selected", "")
     if not target:
         return {"ok": False, "message": "Please select a printer in Settings first."}
-    res = get_adapter().print_test(target)
+    # Test print on the same label size as real tags (settings), not a guessed
+    # 50x25 mm page — otherwise the driver form differs and the test label
+    # lands across two physical labels.
+    from app.tag.renderer import DEFAULT_TAG_HEIGHT_MM, DEFAULT_TAG_WIDTH_MM
+
+    tag = settings_service.get_category(db, "tag")
+    try:
+        w = float(tag.get("width_mm") or DEFAULT_TAG_WIDTH_MM)
+        h = float(tag.get("height_mm") or DEFAULT_TAG_HEIGHT_MM)
+    except ValueError:
+        w, h = DEFAULT_TAG_WIDTH_MM, DEFAULT_TAG_HEIGHT_MM
+    res = get_adapter().print_test(target, width_mm=w, height_mm=h)
     if res.ok:
         record("PRINT", "info", f"Test print succeeded on '{target}'.")
     else:

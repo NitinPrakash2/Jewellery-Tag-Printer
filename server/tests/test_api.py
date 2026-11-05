@@ -15,7 +15,7 @@ class FakeAdapter:
         assert "<svg" in svg
         return PrintJobResult(ok=True, message="fake ok")
 
-    def print_test(self, printer_name):
+    def print_test(self, printer_name, width_mm=0.0, height_mm=0.0):
         return PrintJobResult(ok=True, message="fake test ok")
 
 
@@ -24,6 +24,27 @@ def _patch(monkeypatch):
     import app.api.routes_history as rh
     monkeypatch.setattr(rp, "get_adapter", lambda: FakeAdapter())
     monkeypatch.setattr(rh, "get_adapter", lambda: FakeAdapter())
+
+
+def test_test_print_uses_configured_label_size(client, monkeypatch):
+    # Test Print must exercise the same driver form as real tags, otherwise the
+    # 50x25 mm test page lands across two 100x15 mm labels and proves nothing.
+    import app.api.routes_printers as rp
+
+    seen = {}
+
+    class SizeProbe(FakeAdapter):
+        def print_test(self, printer_name, width_mm=0.0, height_mm=0.0):
+            seen["size"] = (width_mm, height_mm)
+            return PrintJobResult(ok=True, message="ok")
+
+    monkeypatch.setattr(rp, "get_adapter", lambda: SizeProbe())
+    client.put("/api/settings/tag", json={"width_mm": "100", "height_mm": "15"})
+    client.put("/api/settings/printer", json={"selected": "Fake LP 46"})
+    r = client.post("/api/printers/test", json={"printer_name": "Fake LP 46"})
+    assert r.status_code == 200, r.text
+    assert r.json()["ok"] is True
+    assert seen["size"] == (100.0, 15.0)
 
 
 def test_health_db_ok(client):
@@ -144,7 +165,7 @@ def test_blank_weights_print_and_reprint(client, monkeypatch):
             assert "Gross Wt." not in svg and "Net Wt." not in svg
             return PrintJobResult(ok=True, message="ok")
 
-        def print_test(self, printer_name):
+        def print_test(self, printer_name, width_mm=0.0, height_mm=0.0):
             return PrintJobResult(ok=True, message="ok")
 
     monkeypatch.setattr(rp, "get_adapter", lambda: FakeAdapter())

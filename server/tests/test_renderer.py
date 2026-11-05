@@ -170,6 +170,24 @@ def test_blank_less_hides_row():
     assert "Gross Wt." in svg and "Net Wt." in svg
 
 
+def test_blank_less_leaves_no_gap():
+    # Regression: with Less blank the two remaining rows spread to 0.30h /
+    # 0.80h — a big empty hole in the middle of the tag. Pitch must stay the
+    # same as when all three rows exist, and the block must stay centred.
+    base = {"gross": "2.146 g", "purity": "x", "product": "x",
+            "shop_l1": "", "shop_l2": "", "initial": ""}
+    two = tag_layout(100, 15, {**base, "less": "", "net": "2.146 g"},
+                     show_less=False, tail_mm=35)
+    three = tag_layout(100, 15, {**base, "less": "0.100 g", "net": "2.146 g"},
+                       tail_mm=35)
+    assert len(two["row_ys"]) == 2 and len(three["row_ys"]) == 3
+    gap_two = two["row_ys"][1] - two["row_ys"][0]
+    gap_three = three["row_ys"][1] - three["row_ys"][0]
+    assert abs(gap_two - gap_three) < 0.01
+    # Both blocks share the same vertical centre.
+    assert abs((two["row_ys"][0] + two["row_ys"][1]) / 2 - three["row_ys"][1]) < 0.01
+
+
 def test_explicit_less_shows_row():
     svg = build_tag_svg("18Kt HUID", "Ring", "2.146", "2.046",
                         width_mm=110, height_mm=12, show_less=True)

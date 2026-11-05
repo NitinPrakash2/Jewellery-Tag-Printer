@@ -53,3 +53,5 @@ Admin me ek baar chala dena) — taaki dusre laptop jud payen.
 
 - App me **HELP** tab kholo — poora guide pictures jaisi steps me hai
 - Settings me **Live Error Monitor** ka screenshot bhej do — turant pata chal jayega dikkat app me hai ya printer me
+- Print dhundhla/dotted lage to **Settings → Live Error Monitor** me har print ki ek green **PRINT** line aati hai
+  (jaise `Print bitmap 799x120 dots -> driver page 799x120 dots`). Bas us line ka screenshot bhej dena.

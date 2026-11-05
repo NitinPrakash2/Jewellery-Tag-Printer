@@ -104,6 +104,12 @@ app.include_router(routes_diagnostics.router)
 
 @app.get("/api/health")
 def health():
+    import datetime
+    import os
+    import sys
+
+    from app.printing.windows_spool import PRINT_MODE
+
     db_ok = False
     db_error = ""
     try:
@@ -113,7 +119,17 @@ def health():
     except Exception as exc:
         db_error = str(exc).split("\n")[0][:300]
         log.error("health: database unavailable: %s", db_error)
-    out = {"ok": True, "app": "jewellery-tag-printer", "env": APP_ENV, "db_ok": db_ok}
+    # Build stamp = exe timestamp, so support can tell old builds from new.
+    build = "dev"
+    if getattr(sys, "frozen", False):
+        try:
+            build = datetime.datetime.fromtimestamp(
+                os.path.getmtime(sys.executable)
+            ).strftime("%Y-%m-%d %H:%M")
+        except OSError:
+            build = "frozen"
+    out = {"ok": True, "app": "jewellery-tag-printer", "env": APP_ENV,
+           "db_ok": db_ok, "build": build, "print_mode": PRINT_MODE}
     if not db_ok:
         out["ok"] = False
         out["db_error"] = db_error

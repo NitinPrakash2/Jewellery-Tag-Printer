@@ -97,8 +97,11 @@ def tag_layout(width_mm: float, height_mm: float, texts: dict,
         + [fit_font(r, fw * 0.88, h * 0.20, bold=True) for r in full_rows]
     )
     n = len(full_rows)
-    row_ys = [h * (0.30 + 0.50 * i / max(n - 1, 1)) if n > 1 else h * 0.55
-              for i in range(n)]
+    # Constant row pitch, block centred: a blank field (e.g. empty Less Wt.)
+    # removes its row completely — it must NOT leave an empty gap behind.
+    # 3 rows -> 0.30 / 0.55 / 0.80 (unchanged), 2 rows -> 0.425 / 0.675.
+    pitch = h * 0.25
+    row_ys = [h * 0.55 + (i - (n - 1) / 2) * pitch for i in range(n)]
 
     return {
         "w": w, "h": h,

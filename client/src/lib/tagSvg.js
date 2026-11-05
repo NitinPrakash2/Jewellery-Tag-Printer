@@ -97,7 +97,10 @@ export function tagLayout(widthMm, heightMm, texts, showLess = true, tailMm = 0,
   const n = fullRows.length;
   const rowFont =
     Math.round(Math.min(h * 0.2, ...fullRows.map((r) => fitFont(r, fw * 0.88, h * 0.2, "sans", true))) * 100) / 100;
-  const rowYs = fullRows.map((_, i) => (n > 1 ? h * (0.3 + (0.5 * i) / (n - 1)) : h * 0.55));
+  // Constant row pitch, block centred (mirrors server layout.py): a blank
+  // field removes its row entirely, so no empty gap is left behind.
+  const pitch = h * 0.25;
+  const rowYs = fullRows.map((_, i) => h * 0.55 + (i - (n - 1) / 2) * pitch);
 
   return {
     w, h, bodyX, bodyW, foldX, logoCx, logoHw, ix, iw,

@@ -47,6 +47,18 @@ server/app_data/
 server/uploads/
 server/assets_local/
 
+# Images and test renders
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.bmp
+*.tiff
+images/
+!client/src/assets/*
+!client/public/*
+
 # OS / editors
 .DS_Store
 Thumbs.db

@@ -99,7 +99,8 @@ class LP46NeoAdapter(PrinterAdapter):
             return PrintJobResult(ok=False, message=str(exc))
         return self._print_bitmap(printer_name, png, copies, width_mm=w, height_mm=h)
 
-    def print_test(self, printer_name: str) -> PrintJobResult:
+    def print_test(self, printer_name: str, width_mm: float = 0.0,
+                   height_mm: float = 0.0) -> PrintJobResult:
         from app.printing.raster import svg_to_png_bytes
 
         try:
@@ -111,18 +112,40 @@ class LP46NeoAdapter(PrinterAdapter):
                 ok=False,
                 message=f"'{printer_name}' is not ready ({info.status}).",
             )
-        test_svg = (
-            '<svg xmlns="http://www.w3.org/2000/svg" width="50mm" height="25mm">'
-            "<rect x='0.3' y='0.3' width='49.4' height='24.4' fill='none' "
-            "stroke='black' stroke-width='0.3'/>"
-            "<text x='50%' y='55%' text-anchor='middle' font-size='4'>TEST PRINT</text>"
-            "</svg>"
-        )
+        # Test print uses the SAME label size as real tags, so it exercises the
+        # exact same driver form and dot count — that is what the shop sees in
+        # Settings > Live Error Monitor and what proves the print path works.
+        w = float(width_mm) if width_mm and width_mm > 0 else 50.0
+        h = float(height_mm) if height_mm and height_mm > 0 else 25.0
+        test_svg = _test_tag_svg(w, h)
         try:
-            png = svg_to_png_bytes(test_svg, 50.0, 25.0, dpi=DPI)
+            png = svg_to_png_bytes(test_svg, w, h, dpi=DPI)
         except RasterError as exc:
             return PrintJobResult(ok=False, message=str(exc))
-        return self._print_bitmap(printer_name, png, 1)
+        return self._print_bitmap(printer_name, png, 1, width_mm=w, height_mm=h)
+
+
+def _test_tag_svg(w: float, h: float) -> str:
+    """Test label: border + TEST PRINT text + a solid black bar.
+
+    The bar is the diagnostic: if it prints dotted, the driver/printer is
+    halftoning; if it is solid, the bitmap path is fine.
+    """
+    font = max(2.0, min(4.0, h * 0.28))
+    bar_h = max(1.5, min(3.0, h * 0.2))
+    bar_y = max(0.8, h - bar_h - 0.8)
+    bar_w = max(1.0, min(w, 60.0) - 2.0)
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{w:g}mm" height="{h:g}mm">'
+        f"<rect x='0.3' y='0.3' width='{max(1.0, w - 0.6):g}' "
+        f"height='{max(1.0, h - 0.6):g}' fill='none' "
+        "stroke='black' stroke-width='0.3'/>"
+        f"<text x='50%' y='55%' text-anchor='middle' font-size='{font:g}'>"
+        "TEST PRINT</text>"
+        f"<rect x='1' y='{bar_y:g}' width='{bar_w:g}' height='{bar_h:g}' "
+        "fill='black'/>"
+        "</svg>"
+    )
 
 
 def _svg_mm_size(svg: str, default_w: float, default_h: float) -> tuple[float, float]:

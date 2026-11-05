@@ -23,6 +23,10 @@ from svglib.svglib import svg2rlg
 from app.logging_setup import log
 from app.tag.units import DPI, mm_to_dots
 
+# Render bigger, then downscale smoothly: 203 dpi direct rendering makes the
+# curves of G/S/0/8 look like dropped ink on a thermal head.
+SUPERSAMPLE = 3
+
 
 class RasterError(Exception):
     pass
@@ -79,7 +83,13 @@ def _ensure_font_files() -> None:
 
 
 def svg_to_png_bytes(svg: str, width_mm: float, height_mm: float, dpi: int = DPI) -> bytes:
-    """Render SVG to PNG bytes of exactly (width_mm, height_mm) at dpi."""
+    """Render SVG to PNG bytes of exactly (width_mm, height_mm) at dpi.
+
+    Rendered at 3x and downscaled with Lanczos before encoding: at 203 dpi a
+    direct render gives blocky, stair-stepped curves (G/S/0/8) that look like
+    failed ink on a thermal head. Supersampling keeps the final bitmap purely
+    black/white (thresholding happens in the spooler) but with smoother shapes.
+    """
     if not svg or "<svg" not in svg:
         raise RasterError("Print data was empty. Nothing was sent.")
     svg = strip_preview_only(svg)
@@ -90,18 +100,19 @@ def svg_to_png_bytes(svg: str, width_mm: float, height_mm: float, dpi: int = DPI
     except Exception as exc:
         raise RasterError(f"Could not render the tag layout: {exc}")
     try:
-        png = renderPM.drawToString(drawing, fmt="PNG", dpi=dpi, bg=0xFFFFFF)
+        png = renderPM.drawToString(drawing, fmt="PNG", dpi=dpi * SUPERSAMPLE, bg=0xFFFFFF)
     except Exception as exc:
         raise RasterError(f"Could not rasterize the tag: {exc}")
 
     target = (mm_to_dots(width_mm), mm_to_dots(height_mm))
     try:
-        img = Image.open(io.BytesIO(png)).convert("RGB")
+        img = Image.open(io.BytesIO(png)).convert("L")
     except Exception as exc:
         raise RasterError(f"Could not decode the print image: {exc}")
     if img.size != target:
         img = img.resize(target, Image.LANCZOS)
     out = io.BytesIO()
     img.save(out, format="PNG")
-    log.info("raster: %smm x %smm @%sdpi -> %sx%s px", width_mm, height_mm, dpi, *target)
+    log.info("raster: %smm x %smm @%sdpi (x%s supersampled) -> %sx%s px",
+             width_mm, height_mm, dpi, SUPERSAMPLE, *target)
     return out.getvalue()
